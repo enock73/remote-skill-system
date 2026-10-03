@@ -1,0 +1,11 @@
+PUT YOUR HERO PHOTOS HERE
+=========================
+Replace these three files with your own photos. Keep the SAME file names:
+
+  student-tech-1.jpg   <- PHOTO 1 (first slide)
+  student-tech-2.jpg   <- PHOTO 2 (second slide)
+  student-tech-3.jpg   <- PHOTO 3 (third slide)
+
+Tips: landscape photos, about 1920 x 1080 pixels, JPG, under 500 KB each.
+The website serves them at /images/student-tech-1.jpg etc. No code changes needed.
+After replacing, refresh the browser with Ctrl+F5.

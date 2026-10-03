@@ -1,0 +1,4 @@
+{% extends 'base.html' %}{% block content %}<h1 class="h3 mb-3">Welcome, {{ current_user.full_name }} {{ m.verified(current_user) }}</h1>
+<div class="row row-cols-2 row-cols-md-3 row-cols-lg-5 g-3 mb-4">{% for label, n, icon in stats %}<div class="col"><div class="card stat p-3"><i class="bi bi-{{ icon }} text-primary"></i><div class="n">{{ n }}</div><small class="text-muted">{{ label }}</small></div></div>{% endfor %}</div>
+<h2 class="h5">Recent bookings</h2>{% if recent %}{% set bookings = recent %}{% include "bookings_table.html" %}{% else %}{{ m.empty('calendar', 'No bookings yet.', url_for('main.services') if current_user.role == 'customer' else None, 'Find a service') }}{% endif %}
+{% if current_user.role == 'provider' %}<a class="btn btn-primary mt-3" href="{{ url_for('provider.listing_new') }}">Create a service</a>{% endif %}{% endblock %}

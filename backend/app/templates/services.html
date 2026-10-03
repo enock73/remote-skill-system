@@ -1,0 +1,15 @@
+{% extends 'base.html' %}{% block title %}Find services · Remote Skills Exchange{% endblock %}
+{% block content %}<form class="card p-3 mb-4" method="get"><div class="row g-2">
+<div class="col-md-4"><input class="form-control" name="q" value="{{ args.q }}" placeholder="Service, skill, provider or category" aria-label="Keyword"></div>
+<div class="col-md-4"><select class="form-select" name="category_id" aria-label="Category"><option value="">All categories</option>{% for c in cats %}<option value="{{ c.id }}" {{ 'selected' if args.category_id == c.id|string }}>{{ c.name }}</option>{% endfor %}</select></div>
+<div class="col-md-4"><input class="form-control" name="location" value="{{ args.location }}" placeholder="Location" aria-label="Location"></div>
+<div class="col-6 col-md-2"><input class="form-control" type="number" min="0" name="min_price" value="{{ args.min_price }}" placeholder="Min KES"></div>
+<div class="col-6 col-md-2"><input class="form-control" type="number" min="0" name="max_price" value="{{ args.max_price }}" placeholder="Max KES"></div>
+<div class="col-6 col-md-3"><select class="form-select" name="min_rating" aria-label="Minimum rating"><option value="">Any rating</option>{% for r in (4,3,2) %}<option value="{{ r }}" {{ 'selected' if args.min_rating == r|string }}>{{ r }}+ stars</option>{% endfor %}</select></div>
+<div class="col-6 col-md-3"><select class="form-select" name="sort" aria-label="Sort"><option value="new">Newest</option>{% for v, t in (('rating','Top rated'),('price_asc','Price: low to high'),('price_desc','Price: high to low')) %}<option value="{{ v }}" {{ 'selected' if args.sort == v }}>{{ t }}</option>{% endfor %}</select></div>
+<div class="col-md-2 d-flex align-items-center"><div class="form-check"><input class="form-check-input" type="checkbox" name="verified_only" value="1" id="vo" {{ 'checked' if args.verified_only }}><label class="form-check-label" for="vo">Verified only</label></div></div>
+<div class="col-md-12 d-flex gap-2"><button class="btn btn-primary">Search</button><a class="btn btn-light" href="{{ url_for('main.services') }}">Clear</a></div></div></form>
+<div class="d-flex justify-content-between align-items-end mb-3"><h1 class="h2 fw-bold mb-0">Available skills</h1><span class="text-muted">{{ total }} listing(s)</span></div>
+{% if items %}<div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">{% for l in items %}{{ m.listing_card(l) }}{% endfor %}</div>
+{% if pages > 1 %}<nav class="mt-4"><ul class="pagination justify-content-center">{% for p in range(1, pages + 1) %}<li class="page-item {{ 'active' if p == page }}"><a class="page-link" href="{{ url_for('main.services', page=p, **args) }}">{{ p }}</a></li>{% endfor %}</ul></nav>{% endif %}
+{% else %}{{ m.empty('search', 'No services match your search. Try fewer filters.', url_for('main.services'), 'Clear filters') }}{% endif %}{% endblock %}

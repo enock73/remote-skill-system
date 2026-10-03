@@ -1,0 +1,3 @@
+{% extends 'base.html' %}{% block content %}<div class="mx-auto" style="max-width:520px"><h1 class="h3">Review: {{ b.listing.title }}</h1><p class="text-muted">Provider: {{ b.provider.full_name }}</p>
+<form class="card p-4" method="post">{{ m.csrf() }}<div class="form-label">Rating</div><div class="star-input mb-3">{% for i in (5,4,3,2,1) %}<input type="radio" name="rating" id="s{{i}}" value="{{i}}" required><label for="s{{i}}" title="{{i}} stars"><i class="bi bi-star-fill"></i></label>{% endfor %}</div>
+<label class="form-label" for="c">Comment</label><textarea id="c" class="form-control mb-3" name="comment" rows="4" required minlength="3" maxlength="1000"></textarea><button class="btn btn-primary">Post review</button></form></div>{% endblock %}
