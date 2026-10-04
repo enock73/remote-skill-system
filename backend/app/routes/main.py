@@ -25,8 +25,13 @@ def home():
     cats = db.session.query(Category, func.count(SkillListing.id)).outerjoin(SkillListing, (SkillListing.category_id == Category.id) & SkillListing.is_active.is_(True)) \
         .group_by(Category.id).order_by(func.count(SkillListing.id).desc(), Category.name).limit(12).all()
     featured = _active_listings().order_by(SkillListing.created_at.desc()).limit(6).all()
-    verified = User.query.filter_by(role="provider", is_verified=True, is_active_account=True).limit(4).all()
-    return render_template("home.html", cats=cats, featured=featured, verified=verified)
+    # Featured providers: anyone with an active service. Verified first, then most recent work.
+    providers = (User.query.join(SkillListing, SkillListing.provider_id == User.id)
+                 .filter(User.role == "provider", User.is_active_account.is_(True), SkillListing.is_active.is_(True))
+                 .group_by(User.id).order_by(User.is_verified.desc(), func.max(SkillListing.created_at).desc()).limit(4).all())
+    latest = {p.id: SkillListing.query.filter_by(provider_id=p.id, is_active=True).order_by(SkillListing.created_at.desc()).first() for p in providers}
+    counts = {p.id: SkillListing.query.filter_by(provider_id=p.id, is_active=True).count() for p in providers}
+    return render_template("home.html", cats=cats, featured=featured, providers=providers, latest=latest, counts=counts)
 
 
 @bp.route("/services")

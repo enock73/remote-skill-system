@@ -86,9 +86,7 @@ def create_app(config_class=Config):
 
     with app.app_context():
         db.create_all()
-        from sqlalchemy import inspect, text   # add columns introduced after a database was first created
-        if "price_unit" not in {c["name"] for c in inspect(db.engine).get_columns("skill_listings")}:
-            db.session.execute(text("ALTER TABLE skill_listings ADD COLUMN price_unit VARCHAR(30) DEFAULT 'per job'")); db.session.commit()
+        upgrade_database()
     return app
 
 
@@ -96,3 +94,28 @@ def safe_next(target, default):
     if target and target.startswith("/") and not target.startswith("//") and not urlparse(target).netloc:
         return target
     return default
+
+
+# Columns added after the first release. Existing databases get them automatically on start.
+NEW_COLUMNS = {
+    "skill_listings": {"price_unit": "VARCHAR(30) DEFAULT 'per job'", "service_mode": "VARCHAR(10) DEFAULT 'both'",
+                       "shop_address": "VARCHAR(255)", "deposit_percent": "INTEGER DEFAULT 30"},
+    "users": {"mpesa_number": "VARCHAR(20)", "notify_email": "BOOLEAN DEFAULT TRUE", "notify_sms": "BOOLEAN DEFAULT TRUE"},
+    "bookings": {"work_place": "VARCHAR(10) DEFAULT 'customer'", "customer_phone": "VARCHAR(20)", "customer_address": "VARCHAR(255)",
+                 "agreed_price": "FLOAT", "deposit_amount": "FLOAT DEFAULT 0", "deposit_status": "VARCHAR(10) DEFAULT 'none'",
+                 "deposit_code": "VARCHAR(20)", "balance_status": "VARCHAR(10) DEFAULT 'none'", "balance_code": "VARCHAR(20)"},
+    "notifications": {"link": "VARCHAR(200)"},
+}
+
+
+def upgrade_database():
+    from sqlalchemy import inspect, text
+    insp = inspect(db.engine)
+    for table, cols in NEW_COLUMNS.items():
+        if not insp.has_table(table):
+            continue
+        have = {c["name"] for c in insp.get_columns(table)}
+        for name, ddl in cols.items():
+            if name not in have:
+                db.session.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}"))
+    db.session.commit()

@@ -112,8 +112,8 @@ def settings():
         if len(msg) < 3: flash("Write a message first.", "danger")
         else:
             targets = [db.session.get(User, uid)] if uid else User.query.filter(User.role != "admin").all()
-            for t in filter(None, targets): db.session.add(Notification(user_id=t.id, title="Announcement", message=msg[:500]))
-            db.session.commit(); flash(f"Notification sent to {len(targets)} user(s).", "success")
+            for t in filter(None, targets): notify(t.id, "Announcement", msg[:500], sms=False)
+            flash(f"Notification sent to {len(targets)} user(s).", "success")
         return redirect(url_for("admin.settings"))
     return render_template("admin/settings.html", users=User.query.filter(User.role != "admin").order_by(User.full_name).all(),
                            sent=Notification.query.filter_by(title="Announcement").order_by(Notification.created_at.desc()).limit(15).all())

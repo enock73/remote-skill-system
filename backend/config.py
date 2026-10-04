@@ -39,3 +39,21 @@ class Config:
     RATELIMIT_ENABLED = os.environ.get('RATELIMIT_ENABLED', '1') == '1'
     PUBLIC_APP_URL = os.environ.get('PUBLIC_APP_URL', '')
     SOCIAL = {k: os.environ.get('SOCIAL_' + k.upper(), '') for k in ('facebook', 'x', 'linkedin', 'instagram')}
+
+    # ---- Email (any SMTP server, e.g. Gmail with an app password). Leave SMTP_HOST empty to disable email.
+    SMTP_HOST = os.environ.get("SMTP_HOST", "")
+    SMTP_PORT = int(os.environ.get("SMTP_PORT", 587))
+    SMTP_USER = os.environ.get("SMTP_USER", "")
+    SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
+    SMTP_USE_TLS = os.environ.get("SMTP_USE_TLS", "1") == "1"
+    MAIL_FROM = os.environ.get("MAIL_FROM", "") or os.environ.get("SMTP_USER", "")
+
+    # ---- SMS via Africa's Talking. Leave AT_API_KEY empty to disable SMS. Use AT_USERNAME=sandbox and AT_SANDBOX=1 to test.
+    AT_USERNAME = os.environ.get("AT_USERNAME", "")
+    AT_API_KEY = os.environ.get("AT_API_KEY", "")
+    AT_SENDER_ID = os.environ.get("AT_SENDER_ID", "")
+    AT_SANDBOX = os.environ.get("AT_SANDBOX", "0") == "1"
+
+    # Deposit rules
+    MIN_DEPOSIT_PERCENT = int(os.environ.get("MIN_DEPOSIT_PERCENT", 10))
+    DEFAULT_DEPOSIT_PERCENT = int(os.environ.get("DEFAULT_DEPOSIT_PERCENT", 30))

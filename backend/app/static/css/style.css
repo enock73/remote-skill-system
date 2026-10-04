@@ -54,3 +54,12 @@ h1,h2,h3,h4{font-family:'Plus Jakarta Sans',system-ui,sans-serif;letter-spacing:
 @keyframes heroSlide{0%{opacity:0;transform:scale(1)}8.33%{opacity:1}33.33%{opacity:1}41.66%{opacity:0;transform:scale(1.12)}100%{opacity:0;transform:scale(1.12)}}
 @media(max-width:767px){.hero{min-height:560px;padding:3rem 0}.hero-overlay{background:linear-gradient(180deg,rgba(4,36,25,.80),rgba(4,36,25,.88))}.btn-mint,.btn-ghost{padding:.75rem 1.4rem}}
 @media(prefers-reduced-motion:reduce){.hero-slide{animation:none}.hero-slide:first-child{opacity:1}}
+
+/* ===== Booking chat ===== */
+.chat-card{display:flex;flex-direction:column;position:sticky;top:5rem}
+.chat-box{height:420px;max-height:60vh;overflow-y:auto;padding:1rem;background:#f4f6f1}
+.bubble-row{display:flex;margin-bottom:.6rem}.bubble-row.mine{justify-content:flex-end}
+.bubble{max-width:82%;padding:.5rem .8rem;border-radius:1rem;background:#fff;border:1px solid #e1e6dc;white-space:pre-wrap;word-break:break-word}
+.bubble-row.mine .bubble{background:#0B6B47;color:#fff;border-color:#0B6B47}
+.bubble .who{font-size:.72rem;opacity:.75;margin-bottom:.15rem}
+@media(max-width:991px){.chat-card{position:static}}

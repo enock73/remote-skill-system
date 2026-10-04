@@ -20,4 +20,33 @@
   const url = document.body.dataset.countUrl, badge = document.getElementById('notif-badge');
   if (url && badge) setInterval(() => fetch(url, { credentials: 'same-origin' }).then(r => r.ok ? r.json() : null).then(d => {
     if (d) { badge.textContent = d.unread; badge.classList.toggle('d-none', !d.unread); } }).catch(() => {}), 30000);
+
+  // Booking chat: send without reloading, and check for new messages every 6 seconds
+  const chat = document.getElementById('chat');
+  if (chat) {
+    const box = document.getElementById('chatBox'), empty = document.getElementById('chatEmpty'), form = document.getElementById('chatForm'), err = document.getElementById('chatError');
+    const lastId = () => { const r = box.querySelectorAll('.bubble-row'); return r.length ? +r[r.length - 1].dataset.id : 0; };
+    const add = m => {
+      if (box.querySelector('[data-id="' + m.id + '"]')) return;
+      const row = document.createElement('div'); row.className = 'bubble-row ' + (m.mine ? 'mine' : 'theirs'); row.dataset.id = m.id;
+      const b = document.createElement('div'); b.className = 'bubble';
+      const w = document.createElement('div'); w.className = 'who'; w.textContent = m.sender + ' · ' + m.time;
+      b.appendChild(w); b.appendChild(document.createTextNode(m.body)); row.appendChild(b); box.appendChild(row);
+      if (empty) empty.classList.add('d-none');
+    };
+    const down = () => { box.scrollTop = box.scrollHeight; };
+    const poll = () => fetch(chat.dataset.messagesUrl + '?after=' + lastId(), { credentials: 'same-origin' })
+      .then(r => r.ok ? r.json() : null).then(d => { if (d && d.messages.length) { d.messages.forEach(add); down(); } }).catch(() => {});
+    down(); setInterval(poll, 6000);
+    if (form) form.addEventListener('submit', e => {
+      e.preventDefault(); e.stopPropagation(); err.classList.add('d-none');
+      const btn = form.querySelector('button'), ta = form.querySelector('textarea'); if (!ta.value.trim()) return;
+      btn.disabled = true;
+      fetch(chat.dataset.sendUrl, { method: 'POST', body: new FormData(form), credentials: 'same-origin', headers: { 'X-Requested-With': 'fetch' } })
+        .then(r => r.json().then(d => ({ ok: r.ok, d })))
+        .then(({ ok, d }) => { if (ok && d.message) { add(d.message); ta.value = ''; down(); } else { err.textContent = d.error || 'Could not send. Try again.'; err.classList.remove('d-none'); } })
+        .catch(() => { err.textContent = 'Network problem. Try again.'; err.classList.remove('d-none'); })
+        .finally(() => { btn.disabled = false; ta.focus(); });
+    });
+  }
 })();

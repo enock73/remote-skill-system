@@ -1,0 +1,92 @@
+{% extends 'base.html' %}{% block title %}Booking #{{ b.id }}{% endblock %}
+{% block content %}
+{% set is_cust = current_user.id == b.customer_id %}{% set is_prov = current_user.id == b.provider_id %}{% set is_admin = current_user.role == 'admin' %}
+{% set num = b.provider.payment_number %}
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+  <div><a class="small text-decoration-none" href="{{ url_for('admin.bookings') if is_admin else url_for('bookings.mine') }}"><i class="bi bi-arrow-left"></i> All bookings</a>
+  <h1 class="h3 mb-0">Booking #{{ b.id }}: {{ b.listing.title }}</h1></div>{{ m.status(b.status) }}</div>
+{% if is_admin %}<div class="alert alert-secondary py-2">Administrator view. You can read this booking and its chat but not act on it.</div>{% endif %}
+<div class="row g-4">
+<div class="col-lg-6">
+
+  <div class="card p-3 mb-3"><h2 class="h6">Details</h2><dl class="row mb-0 small">
+    <dt class="col-5">Provider</dt><dd class="col-7"><a href="{{ url_for('main.provider_profile', pid=b.provider_id) }}">{{ b.provider.full_name }}</a> {{ m.verified(b.provider) }}</dd>
+    <dt class="col-5">Customer</dt><dd class="col-7">{{ b.customer.full_name }}</dd>
+    <dt class="col-5">Preferred date</dt><dd class="col-7">{{ b.requested_date.strftime('%d %b %Y') if b.requested_date else '—' }}</dd>
+    <dt class="col-5">Where the work is done</dt><dd class="col-7">{% if b.work_place == 'shop' %}At the provider's shop{% if b.listing.shop_address %}<br><i class="bi bi-geo-alt"></i> {{ b.listing.shop_address }}{% endif %}{% else %}At the customer's place{% if b.customer_address and (b.contacts_visible or is_cust or is_admin) %}<br><i class="bi bi-geo-alt"></i> {{ b.customer_address }}{% else %}<br><span class="text-muted">Address is shared once the provider accepts</span>{% endif %}{% endif %}</dd>
+    <dt class="col-5">Price</dt><dd class="col-7">{{ kes(b.agreed_price or b.listing.price) }} <span class="text-muted">{{ b.listing.price_unit }}</span></dd>
+    <dt class="col-5">Deposit before work</dt><dd class="col-7">{{ kes(b.deposit_amount or 0) }} <span class="text-muted">({{ b.listing.deposit_pct }}%)</span></dd>
+    <dt class="col-5">Balance after delivery</dt><dd class="col-7">{{ kes(b.balance_amount) }}</dd>
+    {% if b.message %}<dt class="col-5">Customer's note</dt><dd class="col-7" style="white-space:pre-line">{{ b.message }}</dd>{% endif %}
+  </dl></div>
+
+  {% if b.contacts_visible or is_admin %}
+  <div class="card p-3 mb-3 border-success"><h2 class="h6"><i class="bi bi-person-lines-fill"></i> Contact details</h2><dl class="row mb-0 small">
+    {% if is_prov or is_admin %}<dt class="col-5">Customer phone</dt><dd class="col-7"><a href="tel:{{ b.customer_phone }}">{{ b.customer_phone or '—' }}</a></dd>
+      {% if b.work_place == 'customer' %}<dt class="col-5">Go to</dt><dd class="col-7">{{ b.customer_address }}</dd>{% endif %}{% endif %}
+    {% if is_cust or is_admin %}<dt class="col-5">Provider phone</dt><dd class="col-7"><a href="tel:{{ b.provider.phone }}">{{ b.provider.phone or '—' }}</a></dd>
+      {% if b.work_place == 'shop' %}<dt class="col-5">Shop address</dt><dd class="col-7">{{ b.listing.shop_address }}</dd>{% endif %}{% endif %}
+  </dl></div>
+  {% elif b.status == 'pending' %}<div class="alert alert-info small"><i class="bi bi-shield-lock"></i> Phone numbers and addresses are shared automatically once the provider accepts the booking.</div>{% endif %}
+
+  <div class="card p-3 mb-3"><h2 class="h6"><i class="bi bi-cash-coin"></i> Payment</h2>
+  {% if b.status == 'pending' %}<p class="small mb-0">Nothing to pay yet. If the provider accepts, a deposit of <strong>{{ kes(b.deposit_amount or 0) }}</strong> is paid before work starts, and the balance of <strong>{{ kes(b.balance_amount) }}</strong> is paid after the work is delivered.</p>
+  {% elif b.status in ('rejected','cancelled') %}<p class="small mb-0">This booking is {{ b.status }}. No payment is due.</p>
+  {% else %}
+    <div class="small mb-2"><strong>1. Deposit {{ kes(b.deposit_amount or 0) }}</strong> —
+      {% if b.deposit_status == 'confirmed' %}<span class="text-success">confirmed (code {{ b.deposit_code }})</span>{% elif b.deposit_status == 'claimed' %}<span class="text-info-emphasis">reported paid (code {{ b.deposit_code }}), waiting for the provider to confirm</span>{% elif b.deposit_status == 'awaiting' %}<span class="text-warning-emphasis">not paid yet</span>{% else %}not required{% endif %}</div>
+    {% if is_cust and b.status == 'accepted' and b.deposit_status == 'awaiting' %}
+      <div class="alert alert-warning small">Send <strong>{{ kes(b.deposit_amount) }}</strong> by M-Pesa to <strong>{{ num or 'the provider (ask in the chat)' }}</strong> ({{ b.provider.full_name }}). Then type the 10-character transaction code from the M-Pesa message below.</div>
+      <form method="post" action="{{ url_for('bookings.pay', bid=b.id, kind='deposit') }}" class="d-flex gap-2 mb-2">{{ m.csrf() }}<input class="form-control text-uppercase" name="code" maxlength="10" minlength="10" pattern="[A-Za-z0-9]{10}" placeholder="e.g. QGH7K2L9MN" required aria-label="M-Pesa transaction code"><button class="btn btn-primary text-nowrap">I have paid</button></form>
+    {% elif is_prov and b.status == 'accepted' and b.deposit_status == 'awaiting' %}<div class="alert alert-light border small">Waiting for the customer to send the deposit to <strong>{{ num or 'your phone number' }}</strong>. You will be asked to confirm it here.</div>
+    {% elif is_prov and b.deposit_status == 'claimed' %}
+      <div class="alert alert-warning small">The customer says they paid <strong>{{ kes(b.deposit_amount) }}</strong>, code <strong>{{ b.deposit_code }}</strong>. Check your M-Pesa messages for this exact code and amount before confirming.</div>
+      <div class="d-flex gap-2 flex-wrap mb-2"><form method="post" action="{{ url_for('bookings.confirm_payment', bid=b.id, kind='deposit') }}" data-confirm="Confirm you received {{ kes(b.deposit_amount) }} on M-Pesa with code {{ b.deposit_code }}?">{{ m.csrf() }}<button class="btn btn-success btn-sm">Yes, I received it</button></form>
+      <form method="post" action="{{ url_for('bookings.confirm_payment', bid=b.id, kind='deposit') }}">{{ m.csrf() }}<input type="hidden" name="decision" value="not_received"><button class="btn btn-outline-danger btn-sm">Not received</button></form></div>{% endif %}
+
+    <div class="small"><strong>2. Balance {{ kes(b.balance_amount) }}</strong> —
+      {% if b.balance_status == 'confirmed' %}<span class="text-success">paid in full{% if b.balance_code %} (code {{ b.balance_code }}){% endif %}</span>{% elif b.balance_status == 'claimed' %}<span class="text-info-emphasis">reported paid (code {{ b.balance_code }}), waiting for the provider to confirm</span>{% elif b.balance_status == 'unpaid' %}<span class="text-warning-emphasis">due now, after delivery</span>{% else %}paid after the work is delivered{% endif %}</div>
+    {% if is_cust and b.status == 'completed' and b.balance_status == 'unpaid' %}
+      <div class="alert alert-warning small mt-2">Send <strong>{{ kes(b.balance_amount) }}</strong> by M-Pesa to <strong>{{ num or 'the provider' }}</strong>, then enter the code.</div>
+      <form method="post" action="{{ url_for('bookings.pay', bid=b.id, kind='balance') }}" class="d-flex gap-2">{{ m.csrf() }}<input class="form-control text-uppercase" name="code" maxlength="10" minlength="10" pattern="[A-Za-z0-9]{10}" placeholder="M-Pesa code" required aria-label="M-Pesa transaction code"><button class="btn btn-primary text-nowrap">I have paid</button></form>
+    {% elif is_prov and b.balance_status == 'claimed' %}
+      <div class="alert alert-warning small mt-2">The customer says they paid <strong>{{ kes(b.balance_amount) }}</strong>, code <strong>{{ b.balance_code }}</strong>. Check your M-Pesa messages first.</div>
+      <div class="d-flex gap-2 flex-wrap"><form method="post" action="{{ url_for('bookings.confirm_payment', bid=b.id, kind='balance') }}" data-confirm="Confirm you received {{ kes(b.balance_amount) }} with code {{ b.balance_code }}?">{{ m.csrf() }}<button class="btn btn-success btn-sm">Yes, I received it</button></form>
+      <form method="post" action="{{ url_for('bookings.confirm_payment', bid=b.id, kind='balance') }}">{{ m.csrf() }}<input type="hidden" name="decision" value="not_received"><button class="btn btn-outline-danger btn-sm">Not received</button></form></div>{% endif %}
+  {% endif %}</div>
+
+  {% if not is_admin %}<div class="card p-3 mb-3"><h2 class="h6">Actions</h2><div class="d-flex gap-2 flex-wrap">
+    {% if is_prov %}
+      {% if b.status == 'pending' %}<form method="post" action="{{ url_for('bookings.set_status', bid=b.id, new='accepted') }}">{{ m.csrf() }}<button class="btn btn-primary">Accept</button></form>
+        <form method="post" data-confirm="Reject this booking request?" action="{{ url_for('bookings.set_status', bid=b.id, new='rejected') }}">{{ m.csrf() }}<button class="btn btn-outline-danger">Reject</button></form>
+      {% elif b.status == 'accepted' %}<form method="post" data-confirm="Mark this work as completed? The customer will be asked to pay the balance." action="{{ url_for('bookings.set_status', bid=b.id, new='completed') }}">{{ m.csrf() }}<button class="btn btn-success" {{ 'disabled' if b.deposit_status not in ('confirmed','none') }}>Mark completed</button></form>
+        {% if b.deposit_status in ('awaiting','none') %}<form method="post" data-confirm="Cancel this booking?" action="{{ url_for('bookings.set_status', bid=b.id, new='cancelled') }}">{{ m.csrf() }}<button class="btn btn-outline-danger">Cancel booking</button></form>{% endif %}
+        {% if b.deposit_status not in ('confirmed','none') %}<div class="small text-muted w-100">You can mark the work completed once the deposit is confirmed.</div>{% endif %}{% endif %}
+    {% elif is_cust %}
+      {% if b.status == 'pending' or (b.status == 'accepted' and b.deposit_status in ('awaiting','none')) %}<form method="post" data-confirm="Cancel this booking?" action="{{ url_for('bookings.set_status', bid=b.id, new='cancelled') }}">{{ m.csrf() }}<button class="btn btn-outline-danger">Cancel booking</button></form>{% endif %}
+      {% if b.status == 'completed' and not b.review %}<a class="btn btn-sun" href="{{ url_for('bookings.review', bid=b.id) }}">Leave a review</a>{% endif %}
+    {% endif %}
+    <button class="btn btn-outline-secondary ms-auto" data-bs-toggle="collapse" data-bs-target="#reportBox" type="button"><i class="bi bi-flag"></i> Report a problem</button></div>
+    <div class="collapse mt-3" id="reportBox"><form method="post" action="{{ url_for('bookings.report', bid=b.id) }}">{{ m.csrf() }}<label class="form-label small" for="rr">What went wrong? An administrator will read this booking's chat.</label><textarea id="rr" class="form-control mb-2" name="reason" rows="3" maxlength="500" required></textarea><button class="btn btn-danger btn-sm">Send report</button></form></div></div>{% endif %}
+
+  <div class="card p-3 small"><h2 class="h6"><i class="bi bi-shield-check"></i> Stay safe</h2><ul class="mb-0 ps-3">
+    <li>Keep chat and payments inside this booking, so there is a record if something goes wrong.</li>
+    <li>Pay only the deposit before work starts. Pay the balance only after the job is delivered.</li>
+    <li>Check the M-Pesa message for the exact amount and code before confirming a payment.</li>
+    <li>For visits to an address, tell someone where you are going.</li></ul></div>
+</div>
+
+<div class="col-lg-6"><div class="card chat-card" id="chat" data-messages-url="{{ url_for('bookings.messages', bid=b.id) }}" data-send-url="{{ url_for('bookings.send_message', bid=b.id) }}">
+  <div class="card-header bg-white fw-semibold"><i class="bi bi-chat-dots"></i> Chat with {{ b.provider.full_name if is_cust else b.customer.full_name if is_prov else 'both parties' }}</div>
+  <div class="chat-box" id="chatBox" aria-live="polite">
+    {% for msg in b.messages %}<div class="bubble-row {{ 'mine' if msg.sender_id == current_user.id else 'theirs' }}" data-id="{{ msg.id }}"><div class="bubble"><div class="who">{{ msg.sender.full_name }} · {{ msg.created_at.strftime('%d %b %H:%M') }}</div>{{ msg.body }}</div></div>{% endfor %}
+    <div class="text-center text-muted small py-4 {{ 'd-none' if b.messages }}" id="chatEmpty">No messages yet. Say hello and agree the details here.</div>
+  </div>
+  {% if can_chat %}<form class="p-2 border-top" id="chatForm" method="post" action="{{ url_for('bookings.send_message', bid=b.id) }}">{{ m.csrf() }}
+    {% if b.status == 'pending' %}<div class="small text-muted mb-1"><i class="bi bi-shield-lock"></i> Phone numbers and emails are blocked until the provider accepts.</div>{% endif %}
+    <div class="d-flex gap-2"><textarea class="form-control" name="body" rows="2" maxlength="1000" placeholder="Type a message" required aria-label="Message"></textarea><button class="btn btn-primary align-self-end" data-noload="1">Send</button></div>
+    <div class="small text-danger mt-1 d-none" id="chatError" role="alert"></div></form>
+  {% else %}<div class="p-3 border-top small text-muted">{{ 'Read-only administrator view.' if is_admin else 'Chat is closed for this booking.' }}</div>{% endif %}
+</div></div>
+</div>
+{% endblock %}
