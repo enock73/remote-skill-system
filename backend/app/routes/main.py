@@ -16,8 +16,10 @@ PAGES = {
 
 
 def _active_listings():
-    return (db.session.query(SkillListing).join(User, SkillListing.provider_id == User.id)
-            .filter(SkillListing.is_active.is_(True), User.is_active_account.is_(True)))
+    qy = (db.session.query(SkillListing).join(User, SkillListing.provider_id == User.id)
+          .filter(SkillListing.is_active.is_(True), User.is_active_account.is_(True)))
+    if current_app.config["REQUIRE_VERIFICATION"]: qy = qy.filter(User.is_verified.is_(True))   # only verified providers are public
+    return qy
 
 
 @bp.route("/")
@@ -27,7 +29,8 @@ def home():
     featured = _active_listings().order_by(SkillListing.created_at.desc()).limit(6).all()
     # Featured providers: anyone with an active service. Verified first, then most recent work.
     providers = (User.query.join(SkillListing, SkillListing.provider_id == User.id)
-                 .filter(User.role == "provider", User.is_active_account.is_(True), SkillListing.is_active.is_(True))
+                 .filter(User.role == "provider", User.is_active_account.is_(True), SkillListing.is_active.is_(True),
+                         User.is_verified.is_(True) if current_app.config["REQUIRE_VERIFICATION"] else True)
                  .group_by(User.id).order_by(User.is_verified.desc(), func.max(SkillListing.created_at).desc()).limit(4).all())
     latest = {p.id: SkillListing.query.filter_by(provider_id=p.id, is_active=True).order_by(SkillListing.created_at.desc()).first() for p in providers}
     counts = {p.id: SkillListing.query.filter_by(provider_id=p.id, is_active=True).count() for p in providers}
@@ -65,6 +68,8 @@ def service_detail(listing_id):
     l = db.session.get(SkillListing, listing_id) or abort(404)
     if not l.is_active and not (current_user.is_authenticated and (current_user.id == l.provider_id or current_user.role == "admin")):
         abort(404)
+    if current_app.config["REQUIRE_VERIFICATION"] and not l.provider.is_verified and not (current_user.is_authenticated and (current_user.id == l.provider_id or current_user.role == "admin")):
+        abort(404)
     reviews = Review.query.join(Booking, Review.booking_id == Booking.id).filter(Booking.listing_id == l.id).order_by(Review.created_at.desc()).all()
     return render_template("service_detail.html", l=l, reviews=reviews)
 
@@ -73,6 +78,7 @@ def service_detail(listing_id):
 def providers():
     q = (request.args.get("q") or "").strip()
     qy = User.query.filter_by(role="provider", is_active_account=True)
+    if current_app.config["REQUIRE_VERIFICATION"]: qy = qy.filter(User.is_verified.is_(True))
     if q: qy = qy.filter(User.full_name.ilike(f"%{q}%") | User.location.ilike(f"%{q}%"))
     return render_template("providers.html", providers=qy.order_by(User.is_verified.desc(), User.full_name).all(), q=q)
 
@@ -80,6 +86,8 @@ def providers():
 @bp.route("/providers/<int:pid>")
 def provider_profile(pid):
     p = User.query.filter_by(id=pid, role="provider", is_active_account=True).first_or_404()
+    if current_app.config["REQUIRE_VERIFICATION"] and not p.is_verified and not (current_user.is_authenticated and (current_user.id == p.id or current_user.role == "admin")):
+        abort(404)
     listings = SkillListing.query.filter_by(provider_id=pid, is_active=True).order_by(SkillListing.created_at.desc()).all()
     reviews = Review.query.filter_by(provider_id=pid).order_by(Review.created_at.desc()).all()
     return render_template("provider_profile.html", p=p, listings=listings, reviews=reviews)

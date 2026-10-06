@@ -102,7 +102,7 @@ def safe_next(target, default):
 NEW_COLUMNS = {
     "skill_listings": {"price_unit": "VARCHAR(30) DEFAULT 'per job'", "service_mode": "VARCHAR(10) DEFAULT 'both'",
                        "shop_address": "VARCHAR(255)", "deposit_percent": "INTEGER DEFAULT 30"},
-    "users": {"verification_status": "VARCHAR(10) DEFAULT 'none'", "verification_note": "VARCHAR(255)", "verification_submitted_at": "TIMESTAMP",
+    "users": {"verification_status": "VARCHAR(10) DEFAULT 'none'", "verification_note": "VARCHAR(255)", "verification_report": "TEXT", "verification_submitted_at": "TIMESTAMP",
               "id_number": "VARCHAR(20)", "id_photo": "VARCHAR(255)", "selfie_photo": "VARCHAR(255)", "mpesa_number": "VARCHAR(20)", "notify_email": "BOOLEAN DEFAULT TRUE", "notify_sms": "BOOLEAN DEFAULT TRUE"},
     "bookings": {"work_place": "VARCHAR(10) DEFAULT 'customer'", "customer_phone": "VARCHAR(20)", "customer_address": "VARCHAR(255)",
                  "agreed_price": "FLOAT", "deposit_amount": "FLOAT DEFAULT 0", "deposit_status": "VARCHAR(10) DEFAULT 'none'",

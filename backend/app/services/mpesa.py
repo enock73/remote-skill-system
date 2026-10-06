@@ -59,7 +59,7 @@ def stk_push(phone, amount, reference, description):
     ts = datetime.now().strftime("%Y%m%d%H%M%S")
     payload = {"BusinessShortCode": c["MPESA_SHORTCODE"], "Password": _password(ts), "Timestamp": ts,
                "TransactionType": c["MPESA_TRANSACTION_TYPE"], "Amount": int(amount), "PartyA": msisdn(phone),
-               "PartyB": c["MPESA_SHORTCODE"], "PhoneNumber": msisdn(phone), "CallBackURL": callback_url(),
+               "PartyB": c.get("MPESA_TILL_NUMBER") or c["MPESA_SHORTCODE"], "PhoneNumber": msisdn(phone), "CallBackURL": callback_url(),
                "AccountReference": reference[:12], "TransactionDesc": description[:13]}
     return _http(_base() + "/mpesa/stkpush/v1/processrequest", payload,
                  {"Authorization": "Bearer " + _access_token(), "Content-Type": "application/json"})

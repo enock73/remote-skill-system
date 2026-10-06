@@ -70,7 +70,8 @@ def run():
         providers = []
         for name, email, loc, verified in provider_defs:
             p = User(full_name=name, email=email, phone="0711000000", role="provider",
-                     location=loc, is_verified=verified)
+                     location=loc, is_verified=verified or os.environ.get("REQUIRE_VERIFICATION", "1") == "1",
+                     verification_status="approved" if (verified or os.environ.get("REQUIRE_VERIFICATION", "1") == "1") else "none")
             p.set_password("Provider@123")
             db.session.add(p)
             providers.append(p)

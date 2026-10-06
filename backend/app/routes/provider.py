@@ -3,10 +3,12 @@ from flask_login import current_user
 from app.decorators import roles_required
 from app.extensions import db
 from app.models import SkillListing, Category, User, PortfolioPhoto, Notification
+from app.extensions import limiter
+from app.services import idcheck
 from app.services.files import save_private_image, save_public_image, delete_file
 from app.services.notifications import notify
 from datetime import datetime
-import re
+import os, re
 from app.routes.auth import save_image
 
 bp = Blueprint("provider", __name__, url_prefix="/provider")
@@ -25,6 +27,9 @@ def listings():
 
 
 def _form(l=None):
+    if current_app.config["REQUIRE_VERIFICATION"] and not current_user.is_verified:
+        flash("Verify your identity first. Only verified providers can list services.", "warning")
+        return redirect(url_for("provider.verification"))
     errors, f = {}, request.form
     if request.method == "POST":
         title, desc = f.get("title", "").strip(), f.get("description", "").strip()
@@ -88,20 +93,23 @@ def listing_toggle(lid):
 
 
 # ---------------- identity verification (private documents, reviewed by an admin)
-ID_RE = re.compile(r"^[A-Za-z0-9]{6,12}$")
+ID_RE = re.compile(r"^\d{7,8}$")   # Kenyan national ID numbers are 7 or 8 digits
 MAX_PHOTOS = 12
 
 
 @bp.route("/verification", methods=["GET", "POST"])
 @roles_required("provider")
+@limiter.limit("5 per day", methods=["POST"])
 def verification():
     u = current_user
     if request.method == "POST":
         if u.verification_status in ("pending", "approved"):
-            flash("Your verification is already " + ("waiting for review." if u.verification_status == "pending" else "approved."), "info"); return redirect(url_for("provider.verification"))
-        idn = request.form.get("id_number", "").replace(" ", "").upper()
+            flash("Your verification is already " + ("being checked." if u.verification_status == "pending" else "approved."), "info"); return redirect(url_for("provider.verification"))
+        if request.form.get("consent") != "1":
+            flash("Tick the box to allow us to check your ID.", "danger"); return redirect(url_for("provider.verification"))
+        idn = request.form.get("id_number", "").replace(" ", "")
         if not ID_RE.match(idn):
-            flash("Enter your national ID or passport number (6 to 12 letters or digits).", "danger"); return redirect(url_for("provider.verification"))
+            flash("Enter your Kenyan national ID number (7 or 8 digits).", "danger"); return redirect(url_for("provider.verification"))
         if User.query.filter(User.id_number == idn, User.id != u.id, User.verification_status.in_(("pending", "approved"))).first():
             flash("That ID number is already used on another account. If this is a mistake, contact the administrator.", "danger"); return redirect(url_for("provider.verification"))
         idp, e1 = save_private_image(request.files.get("id_photo")); selfie, e2 = save_private_image(request.files.get("selfie_photo"))
@@ -110,11 +118,27 @@ def verification():
             flash("ID photo: " + e1 if e1 else "Selfie: " + e2, "danger"); return redirect(url_for("provider.verification"))
         for old in (u.id_photo, u.selfie_photo): delete_file("PRIVATE_FOLDER", old)
         u.id_number, u.id_photo, u.selfie_photo = idn, idp, selfie
-        u.verification_status, u.verification_note, u.verification_submitted_at = "pending", None, datetime.utcnow()
-        db.session.commit()
+        u.verification_submitted_at, u.verification_note, u.verification_report = datetime.utcnow(), None, None
+        verdict, note = "review", "AI check is not switched on."
+        if idcheck.enabled():
+            try:
+                folder = current_app.config["PRIVATE_FOLDER"]
+                verdict, note = idcheck.evaluate(idcheck.analyze(os.path.join(folder, idp), os.path.join(folder, selfie)), idn, u.full_name)
+            except Exception as e:
+                current_app.logger.warning("ID AI check failed: %s", e)
+                verdict, note = "review", "AI check was unavailable, so an administrator will check it."
+        u.verification_report = f"AI: {verdict}. {note}"[:1000]
+        if verdict == "fail":
+            u.verification_status, u.verification_note, u.is_verified = "rejected", note, False
+            db.session.commit(); flash("Not approved: " + note, "danger"); return redirect(url_for("provider.verification"))
+        if verdict == "pass" and current_app.config["VERIFY_AUTO_APPROVE"]:
+            u.verification_status, u.is_verified = "approved", True
+            db.session.commit(); notify(u.id, "You're verified!", "Your ID checks passed. You can now list services.", url_for("provider.listing_new"))
+            flash("You are verified. You can now list your services.", "success"); return redirect(url_for("provider.listing_new"))
+        u.verification_status = "pending"; db.session.commit()
         for a in User.query.filter_by(role="admin").all():
-            notify(a.id, "Verification to review", f"{u.full_name} submitted ID documents for verification.", url_for("admin.verifications"), sms=False)
-        flash("Submitted. An administrator will review your documents, usually within a day or two.", "success")
+            notify(a.id, "Verification to review", f"{u.full_name} submitted ID documents. {u.verification_report}", url_for("admin.verifications"), sms=False)
+        flash("Submitted. Your documents passed the first checks and are waiting for final approval." if verdict == "pass" else "Submitted. An administrator will review your documents.", "success")
         return redirect(url_for("provider.verification"))
     return render_template("provider/verification.html")
 

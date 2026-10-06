@@ -42,6 +42,7 @@ def _link(b): return url_for("bookings.detail", bid=b.id)
 def create(listing_id):
     l = db.session.get(SkillListing, listing_id) or abort(404)
     if not l.is_active or not l.provider.is_active_account: abort(404)
+    if current_app.config["REQUIRE_VERIFICATION"] and not l.provider.is_verified: abort(404)
     back = redirect(url_for("main.service_detail", listing_id=l.id))
     f = request.form
     try: when = datetime.strptime(f.get("requested_date", ""), "%Y-%m-%d").date()

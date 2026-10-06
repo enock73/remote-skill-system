@@ -2,7 +2,7 @@
 import os, re, sys, tempfile
 from datetime import datetime, timedelta
 d = tempfile.mkdtemp()
-os.environ.update(DATABASE_URL=f"sqlite:///{d}/t.db", RATELIMIT_ENABLED="0", ADMIN_EMAIL="admin@example.com", ADMIN_PASSWORD="Admin@12345")
+os.environ.update(DATABASE_URL=f"sqlite:///{d}/t.db", RATELIMIT_ENABLED="0", REQUIRE_VERIFICATION="0", ADMIN_EMAIL="admin@example.com", ADMIN_PASSWORD="Admin@12345")
 B = os.path.abspath("backend"); sys.path.insert(0, B); os.chdir(B)
 from app import create_app
 from app.models import User, Booking, Review, Category, Notification
@@ -154,11 +154,12 @@ with app.app_context():
     wc, _ = login("wes@x.com", "Secret123"); post(wc, "/profile", dict(form="profile", full_name="Wes Provider", phone="0733444555", location="Eldoret"), "/profile")
     vera = User.query.filter_by(email="vera@x.com").one(); vid = vera.id
     ok(b"Get verified" in vc.get("/provider/verification").data, "verification page shows")
-    r = post(vc, "/provider/verification", dict(id_number="12345678", id_photo=img("x.jpg", b"not an image at all"), selfie_photo=img()), "/provider/verification"); ok(b"real photo" in r.data and User.query.get(vid).verification_status in (None, "none"), "fake image rejected (content checked, not file name)")
-    r = post(vc, "/provider/verification", dict(id_number="12", id_photo=img(), selfie_photo=img()), "/provider/verification"); ok(b"6 to 12" in r.data, "bad ID number rejected")
-    r = post(vc, "/provider/verification", dict(id_number="12345678", id_photo=img(), selfie_photo=img()), "/provider/verification"); ok(b"administrator will review" in r.data and User.query.get(vid).verification_status == "pending", "documents submitted -> pending")
+    r = post(vc, "/provider/verification", dict(id_number="12345678", consent="1", id_photo=img("x.jpg", b"not an image at all"), selfie_photo=img()), "/provider/verification"); ok(b"real photo" in r.data and User.query.get(vid).verification_status in (None, "none"), "fake image rejected (content checked, not file name)")
+    r = post(vc, "/provider/verification", dict(id_number="12", consent="1", id_photo=img(), selfie_photo=img()), "/provider/verification"); ok(b"7 or 8 digits" in r.data, "bad ID number rejected (Kenyan ID is 7 or 8 digits)")
+    r = post(vc, "/provider/verification", dict(id_number="12345678", consent="1", id_photo=img(), selfie_photo=img()), "/provider/verification"); ok(b"administrator will review" in r.data and User.query.get(vid).verification_status == "pending", "documents submitted -> pending")
+    r = post(wc, "/provider/verification", dict(id_number="12345678", id_photo=img(), selfie_photo=img()), "/provider/verification"); ok(b"Tick the box" in r.data, "consent is required")
     ok(b"Verification to review" in ad.get("/notifications").data, "admins notified of submission")
-    r = post(wc, "/provider/verification", dict(id_number="12345678", id_photo=img(), selfie_photo=img()), "/provider/verification"); ok(b"already used" in r.data, "same ID cannot be used on two accounts")
+    r = post(wc, "/provider/verification", dict(id_number="12345678", consent="1", id_photo=img(), selfie_photo=img()), "/provider/verification"); ok(b"already used" in r.data, "same ID cannot be used on two accounts")
     ok(b"Vera Provider" in ad.get("/admin/verifications").data and b"12345678" in ad.get("/admin/verifications").data, "admin sees pending review")
     fr = ad.get(f"/admin/verifications/{vid}/id"); ok(fr.status_code == 200 and fr.data.startswith(b"\x89PNG"), "admin can open private ID photo")
     ok(vc.get(f"/admin/verifications/{vid}/id").status_code == 403 and cu.get(f"/admin/verifications/{vid}/id").status_code == 403 and app.test_client().get(f"/admin/verifications/{vid}/id").status_code in (302, 403), "ID photo not visible to non-admins")
@@ -166,7 +167,7 @@ with app.app_context():
     ok(b"short reason" in post(ad, f"/admin/verifications/{vid}/decide", dict(decision="reject", reason=""), "/admin/verifications").data, "rejection needs a reason")
     post(ad, f"/admin/verifications/{vid}/decide", dict(decision="reject", reason="ID photo is blurry"), "/admin/verifications")
     ok(User.query.get(vid).verification_status == "rejected" and b"blurry" in vc.get("/provider/verification").data, "provider sees why it was rejected")
-    post(vc, "/provider/verification", dict(id_number="12345678", id_photo=img(), selfie_photo=img()), "/provider/verification")
+    post(vc, "/provider/verification", dict(id_number="12345678", consent="1", id_photo=img(), selfie_photo=img()), "/provider/verification")
     post(ad, f"/admin/verifications/{vid}/decide", dict(decision="approve"), "/admin/verifications")
     ok(User.query.get(vid).is_verified and User.query.get(vid).verification_status == "approved", "approval gives the verified badge")
     ok(cu.get(f"/providers/{vid}").status_code == 200 and b"Verified" in cu.get(f"/providers/{vid}").data, "badge shown on public profile")
@@ -197,13 +198,14 @@ with app.app_context():
     post(c4, f"/book/{vsid}", dict(BK, requested_date="2030-05-05"), f"/services/{vsid}"); vb = Booking.query.order_by(Booking.id.desc()).first().id
     post(vc, f"/bookings/{vb}/accepted", {}, "/bookings")
     pg = c4.get(f"/bookings/{vb}").get_data(as_text=True); ok("held safely by the platform" in pg and "Pay KSh 300" in pg, "customer sees STK pay button for the deposit")
+    app.config.update(MPESA_TILL_NUMBER="5551234", MPESA_TRANSACTION_TYPE="CustomerBuyGoodsOnline")
     ok(b"M-Pesa prompt" in post(c4, f"/bookings/{vb}/pay/deposit", {"code": "QWE1234567"}, f"/bookings/{vb}").data, "manual code entry is off when STK is enabled")
     with mock.patch.object(MP, "_http", fake_http):
         ok(b"M-Pesa phone number to charge" in post(c4, f"/bookings/{vb}/stk/deposit", {"phone": "12"}, f"/bookings/{vb}").data, "bad phone rejected for STK")
         ok(post(vc, f"/bookings/{vb}/stk/deposit", {}, "/bookings").status_code == 403, "provider cannot trigger the customer payment")
         ok(b"Check your phone" in post(c4, f"/bookings/{vb}/stk/deposit", {"phone": "0700111222"}, f"/bookings/{vb}").data, "STK prompt sent")
         push = [d for u, d in calls if "processrequest" in u][-1]
-        ok(push["Amount"] == 300 and push["PhoneNumber"] == "254700111222" and push["CallBackURL"].endswith(SECRET) and push["BusinessShortCode"], "STK request has correct amount, phone, callback")
+        ok(push["Amount"] == 300 and push["PhoneNumber"] == "254700111222" and push["CallBackURL"].endswith(SECRET) and push["BusinessShortCode"] and push["PartyB"] == "5551234" and push["TransactionType"] == "CustomerBuyGoodsOnline", "STK request has correct amount, phone, callback, till as PartyB")
         ok(b"just sent" in post(c4, f"/bookings/{vb}/stk/deposit", {"phone": "0700111222"}, f"/bookings/{vb}").data, "double-tap guard on STK")
     p1 = Payment.query.filter_by(booking_id=vb).one(); cid = p1.checkout_request_id
     def cb(code=0, amount=300, receipt="RCP0000001", secret=SECRET, cid_=None):
@@ -238,8 +240,58 @@ with app.app_context():
         post(c4, f"/bookings/{vb2}/stk/deposit", {"phone": "0700111222"}, f"/bookings/{vb2}")
         q["result"] = {"ResultCode": "0", "ResultDesc": "ok"}
         ok(b"Payment received" in post(c4, f"/bookings/{vb2}/stk-check", {}, f"/bookings/{vb2}").data and Booking.query.get(vb2).deposit_status == "confirmed", "check: paid prompt confirms deposit without a callback")
-    app.config.update(MPESA_CONSUMER_KEY="", MPESA_CALLBACK_SECRET="", COMMISSION_PERCENT=0)
+    app.config.update(MPESA_CONSUMER_KEY="", MPESA_CALLBACK_SECRET="", COMMISSION_PERCENT=0, MPESA_TILL_NUMBER="", MPESA_TRANSACTION_TYPE="CustomerPayBillOnline")
     ok(not MP.enabled(), "STK switches off cleanly without credentials")
+    # ---------- verification required before listing; AI document check (mocked)
+    from app.services import idcheck as IC
+    wsid = None
+    wc2, _ = login("wes@x.com", "Secret123")
+    post(wc2, "/provider/services/new", dict(title="Wes repairs", category_id=cat, description="x", price="100", location="Eldoret", service_mode="visit", deposit_percent="30"), "/provider/services/new")
+    wsid = SkillListing.query.filter_by(title="Wes repairs").one().id
+    app.config["REQUIRE_VERIFICATION"] = True
+    r = wc2.get("/provider/services/new", follow_redirects=True); ok(b"Verify your identity first" in r.data, "unverified provider is sent to verification when listing")
+    n0 = SkillListing.query.count(); post(wc2, "/provider/services/new", dict(title="Sneaky", category_id=cat, description="x", price="1", location="E", service_mode="visit", deposit_percent="30"), "/provider/verification"); ok(SkillListing.query.count() == n0, "unverified provider cannot create a service")
+    ok(b"Wes repairs" not in cu.get("/services?q=Wes").data and b"Wes Provider" not in cu.get("/providers").data, "unverified provider hidden from search and provider list")
+    ok(cu.get(f"/services/{wsid}").status_code == 404 and cu.get(f"/providers/{User.query.filter_by(email='wes@x.com').one().id}").status_code == 404, "unverified provider pages are not public")
+    ok(wc2.get(f"/services/{wsid}").status_code == 200, "owner can still see their own service")
+    ok(post(c4, f"/book/{wsid}", dict(BK, requested_date="2030-07-07"), f"/services/{wsid}").status_code == 404, "customers cannot book an unverified provider")
+    ok(b"Dress making" in cu.get("/services?q=Dress").data and b"Vera Provider" in cu.get("/providers").data, "verified provider stays visible")
+    app.config["REQUIRE_VERIFICATION"] = False
+    ok(b"Wes repairs" in cu.get("/services?q=Wes").data, "switch off: unverified providers visible again")
+    app.config.update(ANTHROPIC_API_KEY="k", VERIFY_AUTO_APPROVE=False)
+    GOOD = dict(is_kenyan_national_id=True, id_readable=True, id_number="22222222", full_name="Ann Akinyi Otieno", appears_tampered_or_copy=False,
+                selfie_shows_person_holding_id=True, selfie_id_number="22222222", notes="Looks fine")
+    def new_provider(name, email):
+        c = app.test_client(); post(c, "/register", dict(full_name=name, email=email, password="Secret123", confirm="Secret123", role="provider"), "/register"); return c
+    def submit(c, idn, result=None, boom=False):
+        with mock.patch.object(IC, "analyze", side_effect=RuntimeError("down") if boom else None, return_value=result):
+            return post(c, "/provider/verification", dict(id_number=idn, consent="1", id_photo=img(), selfie_photo=img()), "/provider/verification")
+    def status(email): return User.query.filter_by(email=email).one()
+    ann = new_provider("Ann Akinyi", "ann@x.com"); r = submit(ann, "22222222", GOOD)
+    ok(status("ann@x.com").verification_status == "pending" and "AI: pass" in status("ann@x.com").verification_report and b"waiting for final approval" in r.data, "AI pass -> waits for admin approval by default")
+    ok(b"AI: pass" in ad.get("/admin/verifications").data, "admin sees the AI report")
+    bob = new_provider("Bob Kamau", "bob@x.com"); r = submit(bob, "33333333", dict(GOOD, is_kenyan_national_id=False))
+    ok(status("bob@x.com").verification_status == "rejected" and b"does not look like a Kenyan national ID" in r.data, "AI: not a Kenyan ID -> rejected with reason")
+    cy = new_provider("Cy Mwangi", "cy@x.com"); r = submit(cy, "44444444", dict(GOOD, id_number="99999999", selfie_id_number="99999999"))
+    ok(status("cy@x.com").verification_status == "rejected" and b"does not match the number on the card" in r.data, "AI: typed number differs from card -> rejected")
+    dee = new_provider("Dee Wanjiru", "dee@x.com"); r = submit(dee, "55555555", dict(GOOD, id_number="55555555", selfie_id_number="55555555", full_name="Someone Else"))
+    ok(status("dee@x.com").verification_status == "pending" and "does not clearly match" in status("dee@x.com").verification_report, "AI: name mismatch -> goes to an admin")
+    gil = new_provider("Gil Odhiambo", "gil@x.com"); r = submit(gil, "66666666", dict(GOOD, id_number="66666666", selfie_id_number="66666666", full_name="Gil Odhiambo", selfie_shows_person_holding_id=False))
+    ok(status("gil@x.com").verification_status == "rejected" and b"holding your ID" in r.data, "AI: selfie without the ID card -> rejected")
+    eve = new_provider("Eve Njeri", "eve@x.com"); app.config["VERIFY_AUTO_APPROVE"] = True
+    r = submit(eve, "77777777", dict(GOOD, id_number="77777777", selfie_id_number="77777777", full_name="Eve Njeri Kimani"))
+    ok(status("eve@x.com").is_verified and status("eve@x.com").verification_status == "approved", "AI pass + auto-approve on -> verified at once")
+    app.config["VERIFY_AUTO_APPROVE"] = False
+    fay = new_provider("Fay Chebet", "fay@x.com"); r = submit(fay, "88888888", boom=True)
+    ok(status("fay@x.com").verification_status == "pending" and "unavailable" in status("fay@x.com").verification_report, "AI service down -> falls back to an administrator")
+    # the real request to Claude (mocked network)
+    with mock.patch("urllib.request.urlopen") as uo:
+        uo.return_value.__enter__.return_value.read.return_value = _json.dumps({"content": [{"type": "text", "text": "Here: " + _json.dumps(GOOD)}]}).encode()
+        folder = app.config["PRIVATE_FOLDER"]; got = IC.analyze(os.path.join(folder, vera.id_photo), os.path.join(folder, vera.selfie_photo))
+        req = uo.call_args[0][0]; body = _json.loads(req.data)
+        ok(got["id_number"] == "22222222" and req.full_url == "https://api.anthropic.com/v1/messages" and req.get_header("X-api-key") == "k" and sum(1 for b in body["messages"][0]["content"] if b["type"] == "image") == 2, "AI request sends both photos to the Messages API and parses the JSON reply")
+    app.config.update(ANTHROPIC_API_KEY="")
+    ok(not IC.enabled(), "AI check off without a key")
     rid = Review.query.first().id
     ok(b"Review removed" in post(ad, "/admin/reviews", dict(id=rid), "/admin/reviews").data, "admin moderates review")
     ok(post(ad, f"/admin/users/{pid}/suspend", {}, "/admin/users").status_code == 200 and pr.get("/dashboard").status_code == 302, "suspended user logged out")

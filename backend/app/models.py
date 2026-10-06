@@ -24,6 +24,7 @@ class User(db.Model, UserMixin):
     is_verified = db.Column(db.Boolean, default=False)   # provider verification (the badge customers see)
     verification_status = db.Column(db.String(10), default="none")   # none -> pending -> approved / rejected
     verification_note = db.Column(db.String(255))                    # reason shown to the provider when rejected
+    verification_report = db.Column(db.Text)                         # what the AI check found (shown to admins only)
     verification_submitted_at = db.Column(db.DateTime)
     id_number = db.Column(db.String(20))                 # national ID / passport number (private: admin only)
     id_photo = db.Column(db.String(255))                 # private file, never served from /uploads

@@ -65,6 +65,16 @@ class Config:
     MPESA_CONSUMER_SECRET = os.environ.get("MPESA_CONSUMER_SECRET", "")
     MPESA_SHORTCODE = os.environ.get("MPESA_SHORTCODE", "174379")      # sandbox default
     MPESA_PASSKEY = os.environ.get("MPESA_PASSKEY", "")
+    MPESA_TILL_NUMBER = os.environ.get("MPESA_TILL_NUMBER", "")        # Buy Goods only: the till that receives the money (MPESA_SHORTCODE is then the Store number)
     MPESA_TRANSACTION_TYPE = os.environ.get("MPESA_TRANSACTION_TYPE", "CustomerPayBillOnline")   # CustomerBuyGoodsOnline for a till
     MPESA_CALLBACK_SECRET = os.environ.get("MPESA_CALLBACK_SECRET", "")   # random text; part of the callback URL so strangers cannot fake payments
     COMMISSION_PERCENT = float(os.environ.get("COMMISSION_PERCENT", 0))   # platform fee kept from each payout
+
+    # ---- Provider verification
+    # Providers must be verified before they can list services and before customers can see or book them.
+    REQUIRE_VERIFICATION = os.environ.get("REQUIRE_VERIFICATION", "1") == "1"
+    # AI document check (Claude reads the ID photo). Leave ANTHROPIC_API_KEY empty to send every submission to an administrator instead.
+    ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+    ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-5-5")
+    # 1 = a submission that passes every AI check is approved at once. 0 = it waits for one-click admin approval (safer).
+    VERIFY_AUTO_APPROVE = os.environ.get("VERIFY_AUTO_APPROVE", "0") == "1"
