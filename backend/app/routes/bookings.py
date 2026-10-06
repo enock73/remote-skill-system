@@ -4,8 +4,11 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_required, current_user
 from app.decorators import roles_required
 from app.extensions import db, limiter
-from app.models import Booking, SkillListing, Review, Notification, Message, User
+from app.models import Booking, SkillListing, Review, Notification, Message, User, Payment
 from app.services.notifications import notify, normalize_phone
+from app.services import mpesa
+import hmac, math
+from flask import current_app
 
 bp = Blueprint("bookings", __name__)
 
@@ -82,7 +85,7 @@ def detail(bid):
     b = _booking_for(bid)
     Notification.query.filter_by(user_id=current_user.id, link=_link(b), is_read=False).update({"is_read": True}); db.session.commit()
     can_chat = current_user.role != "admin" and b.status in CHAT_STATUSES
-    return render_template("booking_detail.html", b=b, can_chat=can_chat, kes=kes)
+    return render_template("booking_detail.html", b=b, can_chat=can_chat, kes=kes, mpesa_on=mpesa.enabled())
 
 
 @bp.route("/bookings/<int:bid>/<new>", methods=["POST"])
@@ -107,7 +110,7 @@ def set_status(bid, new):
     db.session.commit()
     num = b.provider.payment_number or "the provider's number (ask in chat)"
     msgs = {
-        "accepted": ("Booking accepted", f"Your request for '{t}' was accepted. " + (f"Pay the {kes(b.deposit_amount)} deposit to {num} by M-Pesa, then enter the transaction code on the booking page." if b.deposit_status == "awaiting" else "No deposit is needed."), b.customer_id),
+        "accepted": ("Booking accepted", f"Your request for '{t}' was accepted. " + ((f"Pay the {kes(b.deposit_amount)} deposit from the booking page: you will get an M-Pesa prompt on your phone. It is held safely until the job is done." if mpesa.enabled() else f"Pay the {kes(b.deposit_amount)} deposit to {num} by M-Pesa, then enter the transaction code on the booking page.") if b.deposit_status == "awaiting" else "No deposit is needed."), b.customer_id),
         "rejected": ("Booking declined", f"Your request for '{t}' was declined.", b.customer_id),
         "completed": ("Service completed", f"'{t}' was marked completed. " + (f"Please pay the balance of {kes(b.balance_amount)} and leave a review." if b.balance_status == "unpaid" else "You can now leave a review."), b.customer_id),
         "cancelled": ("Booking cancelled", f"{(b.customer if current_user.role == 'customer' else b.provider).full_name} cancelled the booking for '{t}'.", b.provider_id if current_user.role == "customer" else b.customer_id)}
@@ -125,6 +128,8 @@ def pay(bid, kind):
     ok_state = (b.status == "accepted" and b.deposit_status == "awaiting") if kind == "deposit" else (b.status == "completed" and b.balance_status == "unpaid")
     if not ok_state:
         flash("No payment is due on this booking right now.", "danger"); return redirect(_link(b))
+    if mpesa.enabled():
+        flash("Payments are made with the M-Pesa prompt on this page. Press the Pay button.", "warning"); return redirect(_link(b))
     code = request.form.get("code", "").strip().upper()
     if not MPESA_CODE.match(code):
         flash("Enter the 10-character M-Pesa transaction code from your confirmation message (for example QGH7K2L9MN).", "danger"); return redirect(_link(b))
@@ -138,6 +143,82 @@ def pay(bid, kind):
     notify(b.provider_id, f"{kind.capitalize()} payment reported", f"{current_user.full_name} says they paid {kes(amount)} (code {code}) for '{b.listing.title}'. Check your M-Pesa and confirm.", _link(b))
     flash("Thanks. The provider has been asked to confirm they received it.", "success")
     return redirect(_link(b))
+
+
+# ---------------- M-Pesa STK Push (money is held by the platform; see services/mpesa.py)
+def _due(b, kind):
+    return (b.status == "accepted" and b.deposit_status == "awaiting") if kind == "deposit" else (b.status == "completed" and b.balance_status == "unpaid")
+
+
+@bp.route("/bookings/<int:bid>/stk/<kind>", methods=["POST"])
+@roles_required("customer")
+@limiter.limit("6 per 10 minutes", methods=["POST"])
+def stk(bid, kind):
+    b = db.session.get(Booking, bid) or abort(404)
+    if b.customer_id != current_user.id or kind not in ("deposit", "balance"): abort(403)
+    if not mpesa.enabled():
+        flash("Online M-Pesa payment is not switched on. Pay the provider and enter the code instead.", "warning"); return redirect(_link(b))
+    if not _due(b, kind):
+        flash("No payment is due on this booking right now.", "danger"); return redirect(_link(b))
+    phone = normalize_phone(request.form.get("phone", "") or b.customer_phone)
+    if not phone:
+        flash("Enter the M-Pesa phone number to charge (for example 0712 345 678).", "danger"); return redirect(_link(b))
+    last = Payment.query.filter_by(booking_id=b.id, kind=kind, status="pending").order_by(Payment.id.desc()).first()
+    if last and (datetime.utcnow() - last.created_at).total_seconds() < 90:
+        flash("A payment prompt was just sent to your phone. Enter your M-Pesa PIN, then press \"I have paid, check now\".", "info"); return redirect(_link(b))
+    amount = math.ceil(b.deposit_amount if kind == "deposit" else b.balance_amount)
+    if amount < 1:
+        flash("Nothing to pay.", "danger"); return redirect(_link(b))
+    try:
+        r = mpesa.stk_push(phone, amount, f"BOOKING{b.id}", f"{kind} #{b.id}")
+    except Exception as e:
+        current_app.logger.warning("STK push failed: %s", e)
+        flash("We could not reach M-Pesa just now. Please try again in a minute.", "danger"); return redirect(_link(b))
+    if str(r.get("ResponseCode")) != "0" or not r.get("CheckoutRequestID"):
+        flash("M-Pesa did not accept the request: " + str(r.get("errorMessage") or r.get("ResponseDescription") or "unknown error"), "danger"); return redirect(_link(b))
+    db.session.add(Payment(booking_id=b.id, kind=kind, amount=amount, phone=mpesa.msisdn(phone),
+                           checkout_request_id=r["CheckoutRequestID"], merchant_request_id=r.get("MerchantRequestID")))
+    db.session.commit()
+    flash(f"Check your phone ({phone}) and enter your M-Pesa PIN to pay {kes(amount)}. This page updates by itself, or press \"I have paid, check now\".", "success")
+    return redirect(_link(b))
+
+
+@bp.route("/bookings/<int:bid>/stk-check", methods=["POST"])
+@roles_required("customer")
+@limiter.limit("20 per 10 minutes", methods=["POST"])
+def stk_check(bid):
+    b = db.session.get(Booking, bid) or abort(404)
+    if b.customer_id != current_user.id: abort(403)
+    p = Payment.query.filter_by(booking_id=b.id, status="pending").order_by(Payment.id.desc()).first()
+    if not p:
+        flash("No payment is waiting.", "info"); return redirect(_link(b))
+    try:
+        r = mpesa.stk_query(p.checkout_request_id)
+    except Exception:
+        flash("M-Pesa is still processing. Wait a few seconds and press the button again.", "info"); return redirect(_link(b))
+    code = str(r.get("ResultCode", ""))
+    if code == "0":
+        mpesa.apply_result(p, True, None, r.get("ResultDesc")); flash("Payment received. Thank you!", "success")
+    elif code == "":
+        flash("M-Pesa is still processing. Wait a few seconds and try again.", "info")
+    else:
+        mpesa.apply_result(p, False, None, r.get("ResultDesc") or "Cancelled"); flash("The payment was not completed. You can try again.", "warning")
+    return redirect(_link(b))
+
+
+@bp.route("/mpesa/callback/<secret>", methods=["POST"])
+@limiter.exempt
+def mpesa_callback(secret):
+    want = current_app.config.get("MPESA_CALLBACK_SECRET") or ""
+    if not want or not hmac.compare_digest(secret, want): abort(404)
+    ok_reply = jsonify(ResultCode=0, ResultDesc="Accepted")
+    data = (request.get_json(silent=True) or {}).get("Body", {}).get("stkCallback", {})
+    p = Payment.query.filter_by(checkout_request_id=data.get("CheckoutRequestID")).first()
+    if not p: return ok_reply
+    items = {i.get("Name"): i.get("Value") for i in (data.get("CallbackMetadata") or {}).get("Item", [])}
+    success = str(data.get("ResultCode")) == "0"
+    mpesa.apply_result(p, success, items.get("MpesaReceiptNumber"), data.get("ResultDesc"), items.get("Amount"))
+    return ok_reply
 
 
 @bp.route("/bookings/<int:bid>/confirm/<kind>", methods=["POST"])

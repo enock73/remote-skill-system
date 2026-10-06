@@ -57,3 +57,14 @@ class Config:
     # Deposit rules
     MIN_DEPOSIT_PERCENT = int(os.environ.get("MIN_DEPOSIT_PERCENT", 10))
     DEFAULT_DEPOSIT_PERCENT = int(os.environ.get("DEFAULT_DEPOSIT_PERCENT", 30))
+
+    # ---- M-Pesa STK Push (Safaricom Daraja). Leave MPESA_CONSUMER_KEY empty to keep the manual "enter the M-Pesa code" flow.
+    # Money is paid to YOUR shortcode (the platform) and held until the provider is paid out.
+    MPESA_ENV = os.environ.get("MPESA_ENV", "sandbox")                 # sandbox or production
+    MPESA_CONSUMER_KEY = os.environ.get("MPESA_CONSUMER_KEY", "")
+    MPESA_CONSUMER_SECRET = os.environ.get("MPESA_CONSUMER_SECRET", "")
+    MPESA_SHORTCODE = os.environ.get("MPESA_SHORTCODE", "174379")      # sandbox default
+    MPESA_PASSKEY = os.environ.get("MPESA_PASSKEY", "")
+    MPESA_TRANSACTION_TYPE = os.environ.get("MPESA_TRANSACTION_TYPE", "CustomerPayBillOnline")   # CustomerBuyGoodsOnline for a till
+    MPESA_CALLBACK_SECRET = os.environ.get("MPESA_CALLBACK_SECRET", "")   # random text; part of the callback URL so strangers cannot fake payments
+    COMMISSION_PERCENT = float(os.environ.get("COMMISSION_PERCENT", 0))   # platform fee kept from each payout

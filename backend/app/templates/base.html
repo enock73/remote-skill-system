@@ -7,9 +7,9 @@
 <body class="d-flex flex-column min-vh-100" data-count-url="{{ url_for('bookings.count') if current_user.is_authenticated else '' }}">
 {% set role = current_user.role if current_user.is_authenticated else 'public' %}
 {% set nav = {'public': [('main.services','Browse skills'),('main.providers','Providers'),('main.about','About'),('main.contact','Contact')],
- 'provider': [('main.dashboard','Dashboard'),('provider.listings','My Services'),('bookings.mine','Requests'),('bookings.notifications','Notifications'),('bookings.my_reviews','Reviews'),('auth.profile','Profile')],
+ 'provider': [('main.dashboard','Dashboard'),('provider.listings','My Services'),('provider.photos','Work photos'),('provider.verification','Verify me'),('bookings.mine','Requests'),('bookings.notifications','Notifications'),('bookings.my_reviews','Reviews'),('auth.profile','Profile')],
  'customer': [('main.dashboard','Dashboard'),('main.services','Find Services'),('bookings.mine','My Bookings'),('bookings.notifications','Notifications'),('bookings.my_reviews','Reviews'),('auth.profile','Profile')],
- 'admin': [('main.dashboard','Dashboard'),('admin.users','Users'),('admin.providers','Providers'),('admin.services','Services'),('admin.categories','Categories'),('admin.bookings','Bookings'),('admin.reviews','Reviews'),('bookings.notifications','Notifications'),('admin.settings','Settings')]} %}
+ 'admin': [('main.dashboard','Dashboard'),('admin.users','Users'),('admin.providers','Providers'),('admin.verifications','ID checks'),('admin.payouts','Payouts'),('admin.services','Services'),('admin.categories','Categories'),('admin.bookings','Bookings'),('admin.reviews','Reviews'),('bookings.notifications','Notifications'),('admin.settings','Settings')]} %}
 <nav class="navbar navbar-expand-xl navbar-light bg-nav sticky-top"><div class="container-xl">
 <a class="navbar-brand brand" href="{{ url_for('main.home') }}"><span class="brand-logo"><i class="bi bi-mortarboard"></i></span><span class="brand-text"><strong>{{ app_name.split(" ")[:2]|join(" ") }}</strong><small>{{ app_name.split(" ")[2:]|join(" ") }}</small></span></a>
 <button class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#nav" aria-label="Toggle menu"><span class="navbar-toggler-icon"></span></button>

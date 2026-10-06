@@ -21,7 +21,13 @@ class User(db.Model, UserMixin):
     role = db.Column(db.String(20), nullable=False, default="customer")
     location = db.Column(db.String(120))
     profile_image = db.Column(db.String(255), nullable=True)
-    is_verified = db.Column(db.Boolean, default=False)   # provider verification
+    is_verified = db.Column(db.Boolean, default=False)   # provider verification (the badge customers see)
+    verification_status = db.Column(db.String(10), default="none")   # none -> pending -> approved / rejected
+    verification_note = db.Column(db.String(255))                    # reason shown to the provider when rejected
+    verification_submitted_at = db.Column(db.DateTime)
+    id_number = db.Column(db.String(20))                 # national ID / passport number (private: admin only)
+    id_photo = db.Column(db.String(255))                 # private file, never served from /uploads
+    selfie_photo = db.Column(db.String(255))             # private file
     is_active_account = db.Column(db.Boolean, default=True)
     failed_login_attempts = db.Column(db.Integer, default=0)
     locked_until = db.Column(db.DateTime, nullable=True)
@@ -32,6 +38,8 @@ class User(db.Model, UserMixin):
                                 cascade="all, delete-orphan")
     notifications = db.relationship("Notification", backref="user", lazy=True,
                                      cascade="all, delete-orphan")
+    portfolio = db.relationship("PortfolioPhoto", backref="provider", lazy=True,
+                                 cascade="all, delete-orphan", order_by="PortfolioPhoto.id.desc()")
 
     @property
     def payment_number(self):
@@ -187,6 +195,10 @@ class Booking(db.Model):
     deposit_code = db.Column(db.String(20))                     # M-Pesa transaction code entered by the customer
     balance_status = db.Column(db.String(10), default="none")   # none -> unpaid -> claimed -> confirmed
     balance_code = db.Column(db.String(20))
+    payout_status = db.Column(db.String(10), default="none")    # none -> due -> paid (only for money held by the platform via STK Push)
+    payout_amount = db.Column(db.Float, default=0.0)
+    payout_ref = db.Column(db.String(40))                       # M-Pesa reference of the payout to the provider
+    payout_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -195,6 +207,7 @@ class Booking(db.Model):
     provider = db.relationship("User", foreign_keys=[provider_id])
     review = db.relationship("Review", backref="booking", uselist=False,
                               cascade="all, delete-orphan")
+    payments = db.relationship("Payment", backref="booking", lazy=True, cascade="all, delete-orphan", order_by="Payment.id")
 
     @property
     def balance_amount(self):
@@ -285,3 +298,32 @@ class Message(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     sender = db.relationship("User", foreign_keys=[sender_id])
+
+
+class Payment(db.Model):
+    """One M-Pesa STK Push request (deposit or balance). Money lands on the platform's shortcode and is held until payout."""
+    __tablename__ = "payments"
+
+    id = db.Column(db.Integer, primary_key=True)
+    booking_id = db.Column(db.Integer, db.ForeignKey("bookings.id"), nullable=False, index=True)
+    kind = db.Column(db.String(10), nullable=False)             # deposit / balance
+    amount = db.Column(db.Integer, nullable=False)              # whole shillings
+    phone = db.Column(db.String(15), nullable=False)            # 2547XXXXXXXX
+    checkout_request_id = db.Column(db.String(80), unique=True, index=True)
+    merchant_request_id = db.Column(db.String(80))
+    status = db.Column(db.String(10), default="pending")        # pending -> success / failed
+    mpesa_receipt = db.Column(db.String(20), unique=True)       # e.g. QGH7K2L9MN, set on success
+    result_desc = db.Column(db.String(255))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class PortfolioPhoto(db.Model):
+    """Photos of finished work shown on a provider's public profile."""
+    __tablename__ = "portfolio_photos"
+
+    id = db.Column(db.Integer, primary_key=True)
+    provider_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    filename = db.Column(db.String(255), nullable=False)
+    caption = db.Column(db.String(120))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)

@@ -1,0 +1,13 @@
+{% extends 'base.html' %}{% block title %}Verify your identity{% endblock %}
+{% block content %}<div class="mx-auto" style="max-width:680px"><h1 class="h3 mb-3">Get verified</h1>
+{% set st = current_user.verification_status or 'none' %}
+{% if st == 'approved' or current_user.is_verified %}<div class="alert alert-success"><i class="bi bi-patch-check-fill"></i> You are verified. Customers see a Verified badge on your profile and services.</div>
+{% elif st == 'pending' %}<div class="alert alert-info"><i class="bi bi-hourglass-split"></i> Your documents were submitted {{ current_user.verification_submitted_at.strftime('%d %b %Y %H:%M') if current_user.verification_submitted_at }}. An administrator is reviewing them. ID number on file: <strong>{{ '•' * 4 }}{{ (current_user.id_number or '')[-3:] }}</strong>.</div>
+{% else %}
+{% if st == 'rejected' %}<div class="alert alert-danger"><strong>Not approved.</strong> {{ current_user.verification_note }} You can send new documents below.</div>{% endif %}
+<p class="text-muted">Verified providers get more bookings. Customers trust a badge that means a real person was checked. Your documents are <strong>private</strong>: only an administrator can see them, they are never shown on your profile, and the badge is the only thing customers see.</p>
+<form class="card p-4 needs-validation" method="post" enctype="multipart/form-data" novalidate>{{ m.csrf() }}
+<label class="form-label" for="idn">National ID or passport number</label><input id="idn" class="form-control mb-3" name="id_number" required minlength="6" maxlength="14" autocomplete="off">
+<label class="form-label" for="idp">Photo of your ID (front, all text readable)</label><input id="idp" class="form-control mb-1" type="file" name="id_photo" accept="image/*" required><div class="form-text mb-3">JPG, PNG or WebP, up to 5 MB.</div>
+<label class="form-label" for="sf">Selfie holding your ID next to your face</label><input id="sf" class="form-control mb-1" type="file" name="selfie_photo" accept="image/*" capture="user" required><div class="form-text mb-3">This proves the ID is yours.</div>
+<button class="btn btn-primary">Submit for review</button></form>{% endif %}</div>{% endblock %}

@@ -13,6 +13,8 @@ def create_app(config_class=Config):
     app.logger.setLevel("INFO")   # so messages such as password-reset links appear in the terminal
     os.makedirs(app.instance_path, exist_ok=True)
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+    app.config["PRIVATE_FOLDER"] = os.environ.get("PRIVATE_FOLDER") or os.path.join(app.instance_path, "private")   # ID photos: never public
+    os.makedirs(app.config["PRIVATE_FOLDER"], exist_ok=True)
 
     db.init_app(app); migrate.init_app(app, db); limiter.init_app(app); login_manager.init_app(app)
     login_manager.login_view = "auth.login"
@@ -47,7 +49,7 @@ def create_app(config_class=Config):
 
     @app.before_request
     def check_csrf():
-        if request.method == "POST":
+        if request.method == "POST" and request.endpoint != "bookings.mpesa_callback":   # called by Safaricom, protected by a secret URL instead
             sent = request.form.get("csrf_token") or request.headers.get("X-CSRF-Token")
             if not sent or sent != session.get("_csrf"):
                 abort(400, "Your session expired. Reload the page and try again.")
@@ -100,10 +102,12 @@ def safe_next(target, default):
 NEW_COLUMNS = {
     "skill_listings": {"price_unit": "VARCHAR(30) DEFAULT 'per job'", "service_mode": "VARCHAR(10) DEFAULT 'both'",
                        "shop_address": "VARCHAR(255)", "deposit_percent": "INTEGER DEFAULT 30"},
-    "users": {"mpesa_number": "VARCHAR(20)", "notify_email": "BOOLEAN DEFAULT TRUE", "notify_sms": "BOOLEAN DEFAULT TRUE"},
+    "users": {"verification_status": "VARCHAR(10) DEFAULT 'none'", "verification_note": "VARCHAR(255)", "verification_submitted_at": "TIMESTAMP",
+              "id_number": "VARCHAR(20)", "id_photo": "VARCHAR(255)", "selfie_photo": "VARCHAR(255)", "mpesa_number": "VARCHAR(20)", "notify_email": "BOOLEAN DEFAULT TRUE", "notify_sms": "BOOLEAN DEFAULT TRUE"},
     "bookings": {"work_place": "VARCHAR(10) DEFAULT 'customer'", "customer_phone": "VARCHAR(20)", "customer_address": "VARCHAR(255)",
                  "agreed_price": "FLOAT", "deposit_amount": "FLOAT DEFAULT 0", "deposit_status": "VARCHAR(10) DEFAULT 'none'",
-                 "deposit_code": "VARCHAR(20)", "balance_status": "VARCHAR(10) DEFAULT 'none'", "balance_code": "VARCHAR(20)"},
+                 "deposit_code": "VARCHAR(20)", "balance_status": "VARCHAR(10) DEFAULT 'none'", "balance_code": "VARCHAR(20)",
+                 "payout_status": "VARCHAR(10) DEFAULT 'none'", "payout_amount": "FLOAT DEFAULT 0", "payout_ref": "VARCHAR(40)", "payout_at": "TIMESTAMP"},
     "notifications": {"link": "VARCHAR(200)"},
 }
 

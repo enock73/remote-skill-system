@@ -2,7 +2,11 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import current_user
 from app.decorators import roles_required
 from app.extensions import db
-from app.models import SkillListing, Category
+from app.models import SkillListing, Category, User, PortfolioPhoto, Notification
+from app.services.files import save_private_image, save_public_image, delete_file
+from app.services.notifications import notify
+from datetime import datetime
+import re
 from app.routes.auth import save_image
 
 bp = Blueprint("provider", __name__, url_prefix="/provider")
@@ -81,3 +85,66 @@ def listing_toggle(lid):
     l = _own(lid); l.is_active = not l.is_active; db.session.commit()
     flash("Service is now active and visible." if l.is_active else "Service hidden from search.", "success")
     return redirect(url_for("provider.listings"))
+
+
+# ---------------- identity verification (private documents, reviewed by an admin)
+ID_RE = re.compile(r"^[A-Za-z0-9]{6,12}$")
+MAX_PHOTOS = 12
+
+
+@bp.route("/verification", methods=["GET", "POST"])
+@roles_required("provider")
+def verification():
+    u = current_user
+    if request.method == "POST":
+        if u.verification_status in ("pending", "approved"):
+            flash("Your verification is already " + ("waiting for review." if u.verification_status == "pending" else "approved."), "info"); return redirect(url_for("provider.verification"))
+        idn = request.form.get("id_number", "").replace(" ", "").upper()
+        if not ID_RE.match(idn):
+            flash("Enter your national ID or passport number (6 to 12 letters or digits).", "danger"); return redirect(url_for("provider.verification"))
+        if User.query.filter(User.id_number == idn, User.id != u.id, User.verification_status.in_(("pending", "approved"))).first():
+            flash("That ID number is already used on another account. If this is a mistake, contact the administrator.", "danger"); return redirect(url_for("provider.verification"))
+        idp, e1 = save_private_image(request.files.get("id_photo")); selfie, e2 = save_private_image(request.files.get("selfie_photo"))
+        if e1 or e2:
+            delete_file("PRIVATE_FOLDER", idp); delete_file("PRIVATE_FOLDER", selfie)
+            flash("ID photo: " + e1 if e1 else "Selfie: " + e2, "danger"); return redirect(url_for("provider.verification"))
+        for old in (u.id_photo, u.selfie_photo): delete_file("PRIVATE_FOLDER", old)
+        u.id_number, u.id_photo, u.selfie_photo = idn, idp, selfie
+        u.verification_status, u.verification_note, u.verification_submitted_at = "pending", None, datetime.utcnow()
+        db.session.commit()
+        for a in User.query.filter_by(role="admin").all():
+            notify(a.id, "Verification to review", f"{u.full_name} submitted ID documents for verification.", url_for("admin.verifications"), sms=False)
+        flash("Submitted. An administrator will review your documents, usually within a day or two.", "success")
+        return redirect(url_for("provider.verification"))
+    return render_template("provider/verification.html")
+
+
+# ---------------- work photos (public portfolio)
+@bp.route("/photos", methods=["GET", "POST"])
+@roles_required("provider")
+def photos():
+    if request.method == "POST":
+        files = [f for f in request.files.getlist("photos") if f and f.filename]
+        room = MAX_PHOTOS - PortfolioPhoto.query.filter_by(provider_id=current_user.id).count()
+        if not files: flash("Choose at least one photo.", "danger")
+        elif len(files) > room: flash(f"You can have up to {MAX_PHOTOS} work photos. You can add {max(room, 0)} more; delete older ones first.", "danger")
+        else:
+            caption, added = request.form.get("caption", "").strip()[:120], 0
+            for f in files:
+                name, err = save_public_image(f)
+                if err: flash(f"{f.filename}: {err}", "danger"); continue
+                db.session.add(PortfolioPhoto(provider_id=current_user.id, filename=name, caption=caption or None)); added += 1
+            db.session.commit()
+            if added: flash(f"{added} photo{'s' if added != 1 else ''} added to your profile.", "success")
+        return redirect(url_for("provider.photos"))
+    return render_template("provider/photos.html", photos=PortfolioPhoto.query.filter_by(provider_id=current_user.id).order_by(PortfolioPhoto.id.desc()).all(), max_photos=MAX_PHOTOS)
+
+
+@bp.route("/photos/<int:pid>/delete", methods=["POST"])
+@roles_required("provider")
+def photo_delete(pid):
+    p = db.session.get(PortfolioPhoto, pid) or abort(404)
+    if p.provider_id != current_user.id: abort(403)
+    delete_file("UPLOAD_FOLDER", p.filename); db.session.delete(p); db.session.commit()
+    flash("Photo removed.", "success")
+    return redirect(url_for("provider.photos"))
