@@ -153,7 +153,8 @@ with app.app_context():
     post(vc, "/profile", dict(form="profile", full_name="Vera Provider", phone="0722333444", mpesa_number="0722333444", location="Eldoret"), "/profile")
     wc, _ = login("wes@x.com", "Secret123"); post(wc, "/profile", dict(form="profile", full_name="Wes Provider", phone="0733444555", location="Eldoret"), "/profile")
     vera = User.query.filter_by(email="vera@x.com").one(); vid = vera.id
-    ok(b"Get verified" in vc.get("/provider/verification").data, "verification page shows")
+    vp = vc.get("/provider/verification").get_data(as_text=True)
+    ok("Get verified" in vp and vp.count("data-photo-field") == 2 and "Use camera" in vp and "Upload photo" in vp and 'name="id_photo"' in vp and 'name="selfie_photo"' in vp and "js/camera.js" in vp, "verification page offers camera or upload for both photos")
     r = post(vc, "/provider/verification", dict(id_number="12345678", consent="1", id_photo=img("x.jpg", b"not an image at all"), selfie_photo=img()), "/provider/verification"); ok(b"real photo" in r.data and User.query.get(vid).verification_status in (None, "none"), "fake image rejected (content checked, not file name)")
     r = post(vc, "/provider/verification", dict(id_number="12", consent="1", id_photo=img(), selfie_photo=img()), "/provider/verification"); ok(b"7 or 8 digits" in r.data, "bad ID number rejected (Kenyan ID is 7 or 8 digits)")
     r = post(vc, "/provider/verification", dict(id_number="12345678", consent="1", id_photo=img(), selfie_photo=img()), "/provider/verification"); ok(b"administrator will review" in r.data and User.query.get(vid).verification_status == "pending", "documents submitted -> pending")

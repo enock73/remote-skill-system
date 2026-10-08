@@ -1,4 +1,21 @@
 {% extends 'base.html' %}{% block title %}Verify your identity{% endblock %}
+{% macro photo_field(name, label, hint, facing) %}
+<div class="photo-field mb-3" data-photo-field data-facing="{{ facing }}">
+  <label class="form-label d-block" for="pf_{{ name }}">{{ label }}</label>
+  <div class="btn-group btn-group-sm mb-2" role="group" aria-label="How to add the photo">
+    <button type="button" class="btn btn-outline-primary" data-pf-mode="camera"><i class="bi bi-camera"></i> Use camera</button>
+    <button type="button" class="btn btn-outline-primary active" data-pf-mode="upload"><i class="bi bi-upload"></i> Upload photo</button>
+  </div>
+  <input id="pf_{{ name }}" class="form-control" type="file" name="{{ name }}" accept="image/*" required data-pf-file>
+  <div class="d-none" data-pf-cam>
+    <video playsinline muted class="w-100 rounded mb-2" style="max-height:320px;background:#000" data-pf-video></video>
+    <div class="d-flex gap-2"><button type="button" class="btn btn-primary btn-sm" data-pf-snap><i class="bi bi-camera-fill"></i> Take photo</button><button type="button" class="btn btn-light btn-sm" data-pf-stop>Cancel</button></div>
+  </div>
+  <div class="d-none mt-2" data-pf-preview><img alt="Photo preview" class="rounded border" style="max-height:200px"> <button type="button" class="btn btn-link btn-sm" data-pf-retake>Retake</button></div>
+  <div class="small text-danger mt-1 d-none" data-pf-error></div>
+  <div class="form-text">{{ hint }}</div>
+</div>
+{% endmacro %}
 {% block content %}<div class="mx-auto" style="max-width:680px"><h1 class="h3 mb-3">Get verified</h1>
 {% set st = current_user.verification_status or 'none' %}
 {% if st == 'approved' or current_user.is_verified %}<div class="alert alert-success"><i class="bi bi-patch-check-fill"></i> You are verified. Customers see a Verified badge on your profile and services.</div>
@@ -8,7 +25,8 @@
 <p class="text-muted">You must be verified before you can list services. The check is automatic: your ID is read and compared with what you typed, and with your selfie. Your documents are <strong>private</strong>: only an administrator can see them, they are never shown on your profile, and the badge is the only thing customers see.</p>
 <form class="card p-4 needs-validation" method="post" enctype="multipart/form-data" novalidate>{{ m.csrf() }}
 <label class="form-label" for="idn">Kenyan national ID number</label><input id="idn" class="form-control mb-3" name="id_number" required inputmode="numeric" pattern="[0-9]{7,8}" maxlength="8" autocomplete="off" placeholder="7 or 8 digits">
-<label class="form-label" for="idp">Photo of the front of your Kenyan national ID (all text readable)</label><input id="idp" class="form-control mb-1" type="file" name="id_photo" accept="image/*" required><div class="form-text mb-3">JPG, PNG or WebP, up to 5 MB.</div>
-<label class="form-label" for="sf">Selfie holding your ID next to your face</label><input id="sf" class="form-control mb-1" type="file" name="selfie_photo" accept="image/*" capture="user" required><div class="form-text mb-3">This proves the ID is yours.</div>
+{{ photo_field('id_photo', 'Photo of the front of your Kenyan national ID (all text readable)', 'Lay the ID flat in good light. Use the camera or upload a photo. JPG, PNG or WebP, up to 5 MB.', 'environment') }}
+{{ photo_field('selfie_photo', 'Selfie holding your ID next to your face', 'Hold the same ID so its number can be read. This proves the ID is yours.', 'user') }}
 <div class="form-check mb-3"><input class="form-check-input" type="checkbox" id="cs" name="consent" value="1" required><label class="form-check-label small" for="cs">I agree that my ID photos and number are checked to verify me, including by an automated (AI) service, and kept privately.</label></div>
 <button class="btn btn-primary">Submit and verify</button></form>{% endif %}</div>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/camera.js') }}"></script>{% endblock %}
