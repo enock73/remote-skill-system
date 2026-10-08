@@ -78,3 +78,6 @@ class Config:
     ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-5-5")
     # 1 = a submission that passes every AI check is approved at once. 0 = it waits for one-click admin approval (safer).
     VERIFY_AUTO_APPROVE = os.environ.get("VERIFY_AUTO_APPROVE", "0") == "1"
+
+    # A provider must attach at least one photo of the finished work before marking a booking completed.
+    REQUIRE_PROOF_PHOTO = os.environ.get("REQUIRE_PROOF_PHOTO", "1") == "1"

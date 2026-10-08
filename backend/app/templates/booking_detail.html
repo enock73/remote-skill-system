@@ -3,9 +3,17 @@
 {% set is_cust = current_user.id == b.customer_id %}{% set is_prov = current_user.id == b.provider_id %}{% set is_admin = current_user.role == 'admin' %}
 {% set num = b.provider.payment_number %}
 {% macro stk_form(kind, amount) %}
-  <div class="alert alert-warning small"><i class="bi bi-shield-check"></i> Pay <strong>{{ kes(amount) }}</strong> with M-Pesa. You will get a prompt on your phone; enter your PIN. The money is <strong>held safely by the platform</strong> and only paid to the provider after the job is done.</div>
-  <form method="post" action="{{ url_for('bookings.stk', bid=b.id, kind=kind) }}" class="d-flex gap-2 mb-2">{{ m.csrf() }}<input class="form-control" name="phone" value="{{ b.customer_phone or '' }}" placeholder="M-Pesa phone, e.g. 0712 345 678" required aria-label="M-Pesa phone number"><button class="btn btn-success text-nowrap"><i class="bi bi-phone"></i> Pay {{ kes(amount) }}</button></form>
-  {% if b.payments|selectattr('status','equalto','pending')|list %}<form method="post" action="{{ url_for('bookings.stk_check', bid=b.id) }}" class="mb-2">{{ m.csrf() }}<button class="btn btn-outline-primary btn-sm">I have paid, check now</button></form>{% endif %}
+  {% set waiting = b.payments|selectattr('status','equalto','pending')|selectattr('kind','equalto',kind)|list %}
+  <div class="border rounded p-3 mb-2 bg-body-tertiary">
+    <div class="fw-semibold mb-1"><i class="bi bi-phone"></i> Pay {{ kes(amount) }} here with M-Pesa</div>
+    <div class="small text-muted mb-2">Type the phone number that has your M-Pesa. We send a payment prompt to it; enter your PIN to finish. The money is held safely by the platform and paid to the provider after the job is done.</div>
+    <form method="post" action="{{ url_for('bookings.stk', bid=b.id, kind=kind) }}">{{ m.csrf() }}
+      <label class="form-label small mb-1" for="mp-{{ kind }}">M-Pesa phone number</label>
+      <div class="d-flex gap-2"><input id="mp-{{ kind }}" class="form-control" name="phone" inputmode="tel" value="{{ b.customer_phone or current_user.phone or '' }}" placeholder="0712 345 678" required><button class="btn btn-success text-nowrap">Send prompt</button></div>
+    </form>
+    {% if waiting %}<div class="alert alert-info small mt-2 mb-0" data-pay-wait data-check="{{ url_for('bookings.stk_check', bid=b.id) }}"><span class="spinner-border spinner-border-sm"></span> Prompt sent to {{ waiting[-1].phone }}. Enter your M-Pesa PIN on your phone. This page updates by itself.
+      <form method="post" action="{{ url_for('bookings.stk_check', bid=b.id) }}" class="mt-2">{{ m.csrf() }}<button class="btn btn-outline-primary btn-sm">I have paid, check now</button></form></div>{% endif %}
+  </div>
 {% endmacro %}
 
 <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
@@ -35,6 +43,16 @@
   </dl></div>
   {% elif b.status == 'pending' %}<div class="alert alert-info small"><i class="bi bi-shield-lock"></i> Phone numbers and addresses are shared automatically once the provider accepts the booking.</div>{% endif %}
 
+  {% if b.status == 'completed' %}
+  <div class="card p-3 mb-3 border-success"><h2 class="h6"><i class="bi bi-patch-check"></i> Work record</h2>
+    <div class="small mb-2"><strong>Provider:</strong> <span class="text-success">marked the work completed{% if b.completed_at %} on {{ b.completed_at.strftime('%d %b %Y %H:%M') }}{% endif %}</span>{% if b.proof_note %}<br><span class="text-muted">"{{ b.proof_note }}"</span>{% endif %}</div>
+    {% if b.photos %}<div class="row row-cols-3 g-2 mb-2">{% for ph in b.photos %}<div class="col"><a href="{{ url_for('uploaded_file', filename=ph.filename) }}" target="_blank" rel="noopener"><img src="{{ url_for('uploaded_file', filename=ph.filename) }}" class="img-fluid rounded w-100" style="height:110px;object-fit:cover" alt="Photo of finished work" loading="lazy"></a></div>{% endfor %}</div>{% endif %}
+    <div class="small"><strong>Customer:</strong> {% if b.customer_confirmed_at %}<span class="text-success">confirmed the work on {{ b.customer_confirmed_at.strftime('%d %b %Y %H:%M') }}</span>{% else %}<span class="text-warning-emphasis">has not confirmed yet</span>{% endif %}</div>
+    {% if is_cust and not b.customer_confirmed_at %}<form method="post" action="{{ url_for('bookings.confirm_work', bid=b.id) }}" class="mt-2" data-confirm="Confirm that the work was done as agreed?">{{ m.csrf() }}<button class="btn btn-outline-success btn-sm"><i class="bi bi-check2-circle"></i> The work is done, confirm</button></form>
+      <div class="form-text">Check the photos. If something is wrong, use "Report a problem" before you pay.</div>{% endif %}
+  </div>
+  {% endif %}
+
   <div class="card p-3 mb-3"><h2 class="h6"><i class="bi bi-cash-coin"></i> Payment</h2>
   {% if b.status == 'pending' %}<p class="small mb-0">Nothing to pay yet. If the provider accepts, a deposit of <strong>{{ kes(b.deposit_amount or 0) }}</strong> is paid before work starts, and the balance of <strong>{{ kes(b.balance_amount) }}</strong> is paid after the work is delivered.</p>
   {% elif b.status in ('rejected','cancelled') %}<p class="small mb-0">This booking is {{ b.status }}. No payment is due.</p>
@@ -61,6 +79,7 @@
       <div class="alert alert-warning small mt-2">The customer says they paid <strong>{{ kes(b.balance_amount) }}</strong>, code <strong>{{ b.balance_code }}</strong>. Check your M-Pesa messages first.</div>
       <div class="d-flex gap-2 flex-wrap"><form method="post" action="{{ url_for('bookings.confirm_payment', bid=b.id, kind='balance') }}" data-confirm="Confirm you received {{ kes(b.balance_amount) }} with code {{ b.balance_code }}?">{{ m.csrf() }}<button class="btn btn-success btn-sm">Yes, I received it</button></form>
       <form method="post" action="{{ url_for('bookings.confirm_payment', bid=b.id, kind='balance') }}">{{ m.csrf() }}<input type="hidden" name="decision" value="not_received"><button class="btn btn-outline-danger btn-sm">Not received</button></form></div>{% endif %}
+    {% if b.payments %}<div class="mt-3 border-top pt-2"><div class="small fw-semibold mb-1">Payment history</div><div class="table-responsive"><table class="table table-sm small mb-0"><thead><tr><th>When</th><th>For</th><th class="text-end">Amount</th><th>Status</th><th>Receipt</th></tr></thead><tbody>{% for p in b.payments %}<tr><td>{{ p.created_at.strftime('%d %b %H:%M') }}</td><td>{{ p.kind|capitalize }}</td><td class="text-end">{{ kes(p.amount) }}</td><td>{% if p.status == 'success' %}<span class="text-success">Paid</span>{% elif p.status == 'pending' %}<span class="text-warning-emphasis">Waiting for PIN</span>{% else %}<span class="text-danger">Not completed</span>{% endif %}</td><td>{{ p.mpesa_receipt or '' }}</td></tr>{% endfor %}</tbody></table></div></div>{% endif %}
     {% if b.payout_status != 'none' and (is_prov or is_admin) %}<div class="small mt-2 border-top pt-2"><strong>Payout to provider:</strong> {{ kes(b.payout_amount or 0) }} —
       {% if b.payout_status == 'paid' %}<span class="text-success">sent{% if b.payout_ref %} (ref {{ b.payout_ref }}){% endif %}</span>{% else %}<span class="text-warning-emphasis">due, the platform will send it to {{ num or 'the provider' }}</span>{% endif %}</div>{% endif %}
   {% endif %}</div>
@@ -69,7 +88,11 @@
     {% if is_prov %}
       {% if b.status == 'pending' %}<form method="post" action="{{ url_for('bookings.set_status', bid=b.id, new='accepted') }}">{{ m.csrf() }}<button class="btn btn-primary">Accept</button></form>
         <form method="post" data-confirm="Reject this booking request?" action="{{ url_for('bookings.set_status', bid=b.id, new='rejected') }}">{{ m.csrf() }}<button class="btn btn-outline-danger">Reject</button></form>
-      {% elif b.status == 'accepted' %}<form method="post" data-confirm="Mark this work as completed? The customer will be asked to pay the balance." action="{{ url_for('bookings.set_status', bid=b.id, new='completed') }}">{{ m.csrf() }}<button class="btn btn-success" {{ 'disabled' if b.deposit_status not in ('confirmed','none') }}>Mark completed</button></form>
+      {% elif b.status == 'accepted' %}<form method="post" enctype="multipart/form-data" class="w-100 border rounded p-3 bg-light" data-confirm="Mark this work as completed? The customer will see your photos and be asked to pay the balance." action="{{ url_for('bookings.set_status', bid=b.id, new='completed') }}">{{ m.csrf() }}
+          <div class="fw-semibold small mb-1"><i class="bi bi-camera"></i> Finished? Add photos of the completed work</div>
+          <input class="form-control mb-2" type="file" name="proof" accept="image/*" multiple required {{ 'disabled' if b.deposit_status not in ('confirmed','none') }} aria-label="Photos of the finished work">
+          <input class="form-control mb-2" name="note" maxlength="255" placeholder="Short note for the customer (optional)">
+          <button class="btn btn-success" {{ 'disabled' if b.deposit_status not in ('confirmed','none') }}>Mark completed</button></form>
         {% if b.deposit_status in ('awaiting','none') %}<form method="post" data-confirm="Cancel this booking?" action="{{ url_for('bookings.set_status', bid=b.id, new='cancelled') }}">{{ m.csrf() }}<button class="btn btn-outline-danger">Cancel booking</button></form>{% endif %}
         {% if b.deposit_status not in ('confirmed','none') %}<div class="small text-muted w-100">You can mark the work completed once the deposit is confirmed.</div>{% endif %}{% endif %}
     {% elif is_cust %}
