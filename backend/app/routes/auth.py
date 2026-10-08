@@ -5,7 +5,6 @@ from itsdangerous import URLSafeTimedSerializer, BadData
 from app import safe_next
 from app.extensions import db, limiter
 from app.models import User
-from app.services.notifications import send_email, normalize_phone
 
 bp = Blueprint("auth", __name__)
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -80,8 +79,6 @@ def forgot():
         if u:
             link = url_for("auth.reset", token=_ser().dumps({"id": u.id, "h": u.password_hash[-10:]}), _external=True)
             current_app.logger.info("PASSWORD RESET LINK for %s: %s", u.email, link)  # no SMTP configured
-            send_email(u.email, f"{current_app.config['APP_NAME']}: reset your password",
-                       f"Hello {u.full_name},\n\nUse this link to choose a new password (valid for 1 hour):\n{link}\n\nIf you did not ask for this, ignore this email.")
             if current_app.debug: flash(f"Development mode: reset link: {link}", "info")
         flash("If that email is registered, a reset link has been sent.", "success")
         return redirect(url_for("auth.login"))
@@ -116,13 +113,7 @@ def profile():
         else:
             name = f.get("full_name", "").strip()
             if len(name) < 2: flash("Enter your full name.", "danger"); return redirect(url_for("auth.profile"))
-            phone = f.get("phone", "").strip()[:20]
-            if phone and not normalize_phone(phone): flash("That phone number doesn't look right. Use a format like 0712 345 678.", "danger"); return redirect(url_for("auth.profile"))
-            mp = f.get("mpesa_number", "").strip()[:20]
-            if mp and not normalize_phone(mp): flash("That M-Pesa number doesn't look right. Use a format like 0712 345 678.", "danger"); return redirect(url_for("auth.profile"))
-            current_user.full_name, current_user.phone, current_user.location = name, phone, f.get("location", "").strip()[:120]
-            if current_user.role == "provider": current_user.mpesa_number = mp
-            current_user.notify_email, current_user.notify_sms = f.get("notify_email") == "1", f.get("notify_sms") == "1"
+            current_user.full_name, current_user.phone, current_user.location = name, f.get("phone", "").strip()[:20], f.get("location", "").strip()[:120]
             img = save_image(request.files.get("photo"))
             if img: current_user.profile_image = img
             db.session.commit(); flash("Profile saved.", "success")
