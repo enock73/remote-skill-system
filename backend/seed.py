@@ -18,7 +18,7 @@ import os
 from datetime import date, timedelta
 from app import create_app
 from app.extensions import db
-from app.models import Message, User, Category, SkillListing, Booking, Review
+from app.models import User, Category, SkillListing, Booking, Review
 
 app = create_app()
 
@@ -70,8 +70,7 @@ def run():
         providers = []
         for name, email, loc, verified in provider_defs:
             p = User(full_name=name, email=email, phone="0711000000", role="provider",
-                     location=loc, is_verified=verified or os.environ.get("REQUIRE_VERIFICATION", "1") == "1",
-                     verification_status="approved" if (verified or os.environ.get("REQUIRE_VERIFICATION", "1") == "1") else "none")
+                     location=loc, is_verified=verified)
             p.set_password("Provider@123")
             db.session.add(p)
             providers.append(p)
@@ -119,10 +118,6 @@ def run():
                 title=title, description=f"Professional {title.lower()} service. "
                                           f"Reliable, affordable, and available {avail.lower()}.",
                 location=loc, price=price, availability=avail,
-                service_mode=("both" if cat_name in ("Tailoring", "Phone Repair", "Laptop Repair") else "visit"),
-                shop_address=(f"{loc} town centre, Shop 12" if cat_name in ("Tailoring", "Phone Repair", "Laptop Repair") else None),
-                deposit_percent=30,
-                price_unit={"Tailoring": "per item", "Phone Repair": "per repair", "Laptop Repair": "per repair", "Hairdressing": "per style"}.get(cat_name, "per job"),
             )
             db.session.add(listing)
             listings.append(listing)
@@ -133,9 +128,6 @@ def run():
             customer_id=customers[0].id, provider_id=providers[0].id, listing_id=listings[0].id,
             message="Need rewiring for a 3-bedroom house.",
             requested_date=date.today() - timedelta(days=10), status="completed",
-            work_place="customer", customer_phone="+254700000001", customer_address="Milimani Estate, House 14, Nairobi",
-            agreed_price=listings[0].price, deposit_amount=round(listings[0].price * 0.3, 2), deposit_status="confirmed", deposit_code="DEMOCODE01",
-            balance_status="confirmed", balance_code="DEMOCODE02",
         )
         db.session.add(completed_booking)
         db.session.flush()
@@ -150,14 +142,11 @@ def run():
             customer_id=customers[1].id, provider_id=providers[1].id, listing_id=listings[2].id,
             message="I need a suit tailored for a wedding.",
             requested_date=date.today() + timedelta(days=5), status="pending",
-            work_place="shop", customer_phone="+254700000002", agreed_price=listings[2].price, deposit_amount=round(listings[2].price * 0.3, 2),
         ))
         db.session.add(Booking(
             customer_id=customers[2].id, provider_id=providers[2].id, listing_id=listings[4].id,
             message="Cracked screen on an iPhone 12.",
             requested_date=date.today() + timedelta(days=2), status="accepted",
-            work_place="shop", customer_phone="+254700000003", agreed_price=listings[4].price, deposit_amount=round(listings[4].price * 0.3, 2),
-            deposit_status="awaiting",
         ))
 
         db.session.commit()

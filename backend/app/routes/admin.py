@@ -1,9 +1,7 @@
-import os
-from datetime import datetime
-from flask import Blueprint, render_template, request, redirect, url_for, flash, abort, send_from_directory, current_app
+from flask import Blueprint, render_template, request, redirect, url_for, flash, abort
 from app.decorators import roles_required
 from app.extensions import db
-from app.models import User, Category, SkillListing, Booking, Review, Notification, Payment
+from app.models import User, Category, SkillListing, Booking, Review, Notification
 from app.services.notifications import notify
 from flask_login import current_user
 
@@ -41,7 +39,6 @@ def user_action(uid, action):
     if action == "suspend": u.is_active_account = not u.is_active_account; flash("Account " + ("activated." if u.is_active_account else "suspended."), "success")
     elif action == "verify" and u.role == "provider":
         u.is_verified = not u.is_verified
-        u.verification_status = "approved" if u.is_verified else "none"
         if u.is_verified: notify(u.id, "You're verified!", "An administrator verified your profile. A ✓ Verified Skill badge now shows on your services.")
         flash("Verification " + ("granted." if u.is_verified else "removed."), "success")
     elif action == "edit":
@@ -50,9 +47,6 @@ def user_action(uid, action):
         flash("User updated.", "success")
     elif action == "delete":
         for b in Booking.query.filter((Booking.customer_id == u.id) | (Booking.provider_id == u.id)).all(): db.session.delete(b)
-        from app.services.files import delete_file
-        for nm in (u.id_photo, u.selfie_photo): delete_file("PRIVATE_FOLDER", nm)
-        for ph in u.portfolio: delete_file("UPLOAD_FOLDER", ph.filename)
         db.session.flush(); db.session.delete(u); flash("Account and its data removed.", "success")
     else: abort(404)
     db.session.commit(); return back("admin.users")
@@ -118,96 +112,8 @@ def settings():
         if len(msg) < 3: flash("Write a message first.", "danger")
         else:
             targets = [db.session.get(User, uid)] if uid else User.query.filter(User.role != "admin").all()
-            for t in filter(None, targets): notify(t.id, "Announcement", msg[:500], sms=False)
-            flash(f"Notification sent to {len(targets)} user(s).", "success")
+            for t in filter(None, targets): db.session.add(Notification(user_id=t.id, title="Announcement", message=msg[:500]))
+            db.session.commit(); flash(f"Notification sent to {len(targets)} user(s).", "success")
         return redirect(url_for("admin.settings"))
     return render_template("admin/settings.html", users=User.query.filter(User.role != "admin").order_by(User.full_name).all(),
                            sent=Notification.query.filter_by(title="Announcement").order_by(Notification.created_at.desc()).limit(15).all())
-
-
-# ---------------- identity verification review
-@bp.route("/verifications")
-@roles_required("admin")
-def verifications():
-    pending = User.query.filter_by(role="provider", verification_status="pending").order_by(User.verification_submitted_at).all()
-    done = User.query.filter(User.role == "provider", User.verification_status.in_(("approved", "rejected"))).order_by(User.verification_submitted_at.desc()).limit(30).all()
-    return render_template("admin/verifications.html", pending=pending, done=done)
-
-
-@bp.route("/verifications/<int:uid>/<which>")
-@roles_required("admin")
-def verification_file(uid, which):
-    u = db.session.get(User, uid) or abort(404)
-    name = {"id": u.id_photo, "selfie": u.selfie_photo}.get(which) or abort(404)
-    resp = send_from_directory(current_app.config["PRIVATE_FOLDER"], os.path.basename(name))
-    resp.headers["Cache-Control"] = "no-store"
-    return resp
-
-
-@bp.route("/verifications/<int:uid>/decide", methods=["POST"])
-@roles_required("admin")
-def verification_decide(uid):
-    u = _target(uid)
-    if u.role != "provider" or u.verification_status != "pending": abort(400, "Nothing to review for this account.")
-    if request.form.get("decision") == "approve":
-        u.verification_status, u.is_verified, u.verification_note = "approved", True, None
-        notify(u.id, "You're verified!", "Your ID was checked and approved. A Verified badge now shows on your profile and services.", url_for("provider.verification"))
-        flash("Provider verified.", "success")
-    else:
-        reason = request.form.get("reason", "").strip()[:255]
-        if len(reason) < 3:
-            flash("Write a short reason so the provider can fix it.", "danger"); return redirect(url_for("admin.verifications"))
-        u.verification_status, u.is_verified, u.verification_note = "rejected", False, reason
-        notify(u.id, "Verification not approved", f"Reason: {reason}. You can submit new documents.", url_for("provider.verification"))
-        flash("Rejected. The provider was told why.", "warning")
-    db.session.commit()
-    return redirect(url_for("admin.verifications"))
-
-
-# ---------------- payouts: money paid through M-Pesa STK Push is held by the platform until sent to the provider
-@bp.route("/payouts")
-@roles_required("admin")
-def payouts():
-    due = Booking.query.filter_by(payout_status="due").order_by(Booking.updated_at).all()
-    paid = Booking.query.filter_by(payout_status="paid").order_by(Booking.payout_at.desc()).limit(30).all()
-    held = Booking.query.filter(Booking.payout_status == "none", Booking.deposit_status == "confirmed", Booking.status == "accepted").filter(Booking.payments.any(Payment.status == "success")).all()
-    from app.services import mpesa
-    need = ["MPESA_CONSUMER_KEY", "MPESA_CONSUMER_SECRET", "MPESA_PASSKEY", "MPESA_CALLBACK_SECRET", "PUBLIC_APP_URL"]
-    missing = [k for k in need if not current_app.config.get(k)]
-    cb = (current_app.config["PUBLIC_APP_URL"].rstrip("/") + "/mpesa/callback/(secret)") if current_app.config.get("PUBLIC_APP_URL") else ""
-    return render_template("admin/payouts.html", due=due, paid=paid, held=held, mpesa_on=mpesa.enabled(), missing=missing, env=current_app.config["MPESA_ENV"],
-                           shortcode=current_app.config["MPESA_SHORTCODE"], till=current_app.config.get("MPESA_TILL_NUMBER"), cb=cb)
-
-
-@bp.route("/payouts/test-mpesa", methods=["POST"])
-@roles_required("admin")
-def mpesa_test():
-    """Ask Safaricom for an access token: proves the key/secret are right and that this server can reach Safaricom."""
-    import urllib.error
-    from app.services import mpesa
-    if not mpesa.enabled():
-        flash("M-Pesa is not fully set up yet. Fill in the missing settings listed on this page, then reload the site.", "warning"); return redirect(url_for("admin.payouts"))
-    mpesa._token.update(value=None, expires=0)
-    try:
-        mpesa._access_token()
-        flash(f"Connected to Safaricom ({current_app.config['MPESA_ENV']}). Your key and secret work and this server can reach M-Pesa.", "success")
-    except urllib.error.HTTPError as e:
-        flash(f"Safaricom answered but refused the key/secret (HTTP {e.code}). Check MPESA_CONSUMER_KEY and MPESA_CONSUMER_SECRET, and that MPESA_ENV matches the app (sandbox or production).", "danger")
-    except Exception as e:
-        flash("This server could not reach Safaricom: " + str(getattr(e, "reason", e))[:150] + ". On PythonAnywhere's free plan outside connections are blocked; a paid plan is needed.", "danger")
-    return redirect(url_for("admin.payouts"))
-
-
-@bp.route("/payouts/<int:bid>/paid", methods=["POST"])
-@roles_required("admin")
-def payout_paid(bid):
-    b = db.session.get(Booking, bid) or abort(404)
-    ref = request.form.get("ref", "").strip().upper()[:40]
-    if b.payout_status != "due": abort(400, "No payout is due for this booking.")
-    if len(ref) < 6:
-        flash("Enter the M-Pesa reference of the payout you sent.", "danger"); return redirect(url_for("admin.payouts"))
-    b.payout_status, b.payout_ref, b.payout_at = "paid", ref, datetime.utcnow()
-    db.session.commit()
-    notify(b.provider_id, "Payout sent", f"KSh {b.payout_amount:,.0f} for '{b.listing.title}' was sent to your M-Pesa (ref {ref}).", url_for("bookings.detail", bid=b.id))
-    flash("Marked as paid.", "success")
-    return redirect(url_for("admin.payouts"))
