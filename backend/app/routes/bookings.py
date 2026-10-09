@@ -64,9 +64,14 @@ def create(listing_id):
                 customer_address=address if place == "customer" else None, agreed_price=l.price,
                 deposit_amount=round(l.price * pct / 100, 2), deposit_status="none", balance_status="none")
     if not current_user.phone: current_user.phone = phone      # so SMS alerts can reach them
+    pay_now = mpesa.enabled() and (b.deposit_amount or 0) > 0       # deposit is paid by M-Pesa prompt right when booking
+    if pay_now: b.deposit_status = "awaiting"
     db.session.add(b); db.session.commit()
-    notify(l.provider_id, "New booking request", f"{current_user.full_name} requested '{l.title}' for {when:%d %b %Y}. Open it to accept or reject.", _link(b))
-    flash("Booking request sent. Your phone number and address are shared with the provider only if they accept.", "success")
+    if pay_now:
+        flash(f"Almost done: pay the {kes(b.deposit_amount)} deposit below to send your request. You will get an M-Pesa prompt on your phone.", "info")
+    else:
+        notify(l.provider_id, "New booking request", f"{current_user.full_name} requested '{l.title}' for {when:%d %b %Y}. Open it to accept or reject.", _link(b))
+        flash("Booking request sent. Your phone number and address are shared with the provider only if they accept.", "success")
     return redirect(_link(b))
 
 
@@ -103,8 +108,16 @@ def set_status(bid, new):
         flash("Confirm the customer's deposit first. Work should only be completed after the deposit is confirmed.", "danger"); return redirect(_link(b))
     if new == "cancelled" and b.status == "accepted" and b.deposit_status in ("claimed", "confirmed"):
         flash("A deposit has already been paid on this booking, so it can't be cancelled here. Use \"Report a problem\" and an administrator will help.", "danger"); return redirect(_link(b))
+    if new == "accepted" and b.deposit_status == "awaiting":
+        flash("The customer has not paid the deposit yet. You can accept once it is paid.", "danger"); return redirect(_link(b))
+    refund = new in ("rejected", "cancelled") and b.status == "pending" and b.deposit_status == "confirmed"
     b.status = new
-    if new == "accepted":
+    if refund:
+        b.deposit_status = "refund"
+        from app.models import User
+        for a in User.query.filter_by(role="admin").all():
+            notify(a.id, "Refund due", f"Booking #{b.id} '{t}' was {new} after the deposit was paid. Refund {kes(b.deposit_amount)} to {b.customer_phone}.", url_for("admin.payouts"), sms=False)
+    if new == "accepted" and b.deposit_status != "confirmed":
         b.deposit_status = "awaiting" if (b.deposit_amount or 0) > 0 else "none"
     if new == "completed":
         b.balance_status = "unpaid" if b.balance_amount > 0 else "confirmed"
@@ -126,7 +139,7 @@ def set_status(bid, new):
 def pay(bid, kind):
     b = db.session.get(Booking, bid) or abort(404)
     if b.customer_id != current_user.id or kind not in ("deposit", "balance"): abort(403)
-    ok_state = (b.status == "accepted" and b.deposit_status == "awaiting") if kind == "deposit" else (b.status == "completed" and b.balance_status == "unpaid")
+    ok_state = (b.status in ("pending", "accepted") and b.deposit_status == "awaiting") if kind == "deposit" else (b.status == "completed" and b.balance_status == "unpaid")
     if not ok_state:
         flash("No payment is due on this booking right now.", "danger"); return redirect(_link(b))
     if mpesa.enabled():
@@ -148,7 +161,7 @@ def pay(bid, kind):
 
 # ---------------- M-Pesa STK Push (money is held by the platform; see services/mpesa.py)
 def _due(b, kind):
-    return (b.status == "accepted" and b.deposit_status == "awaiting") if kind == "deposit" else (b.status == "completed" and b.balance_status == "unpaid")
+    return (b.status in ("pending", "accepted") and b.deposit_status == "awaiting") if kind == "deposit" else (b.status == "completed" and b.balance_status == "unpaid")
 
 
 @bp.route("/bookings/<int:bid>/stk/<kind>", methods=["POST"])

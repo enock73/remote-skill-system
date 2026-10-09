@@ -36,8 +36,16 @@
   {% elif b.status == 'pending' %}<div class="alert alert-info small"><i class="bi bi-shield-lock"></i> Phone numbers and addresses are shared automatically once the provider accepts the booking.</div>{% endif %}
 
   <div class="card p-3 mb-3"><h2 class="h6"><i class="bi bi-cash-coin"></i> Payment</h2>
-  {% if b.status == 'pending' %}<p class="small mb-0">Nothing to pay yet. If the provider accepts, a deposit of <strong>{{ kes(b.deposit_amount or 0) }}</strong> is paid before work starts, and the balance of <strong>{{ kes(b.balance_amount) }}</strong> is paid after the work is delivered.</p>
-  {% elif b.status in ('rejected','cancelled') %}<p class="small mb-0">This booking is {{ b.status }}. No payment is due.</p>
+  {% if b.status == 'pending' and b.deposit_status == 'awaiting' %}
+    <div class="small mb-2"><strong>Deposit {{ kes(b.deposit_amount or 0) }}</strong> — <span class="text-warning-emphasis">not paid yet</span></div>
+    {% if is_cust and mpesa_on %}{{ stk_form('deposit', b.deposit_amount) }}<div class="small text-muted">Your request reaches the provider as soon as the deposit is paid. The balance of <strong>{{ kes(b.balance_amount) }}</strong> is paid after the work is delivered.</div>
+    {% elif is_prov %}<div class="alert alert-light border small mb-0">Waiting for the customer to pay the deposit. You will be told when it is paid.</div>{% endif %}
+  {% elif b.status == 'pending' and b.deposit_status == 'confirmed' %}
+    <div class="small mb-1"><strong>Deposit {{ kes(b.deposit_amount or 0) }}</strong> — <span class="text-success">paid (receipt {{ b.deposit_code }})</span></div>
+    <p class="small text-muted mb-0">It is held safely by the platform. If the provider declines, it is refunded. The balance of <strong>{{ kes(b.balance_amount) }}</strong> is paid after the work is delivered.</p>
+    {% if b.payments %}<div class="mt-2 small">{% for p in b.payments %}{% if p.status == 'success' %}<div class="text-success">Paid {{ kes(p.amount) }} on {{ p.created_at.strftime('%d %b %H:%M') }}, receipt {{ p.mpesa_receipt or '' }}</div>{% endif %}{% endfor %}</div>{% endif %}
+  {% elif b.status == 'pending' %}<p class="small mb-0">Nothing to pay yet. If the provider accepts, a deposit of <strong>{{ kes(b.deposit_amount or 0) }}</strong> is paid before work starts, and the balance of <strong>{{ kes(b.balance_amount) }}</strong> is paid after the work is delivered.</p>
+  {% elif b.status in ('rejected','cancelled') %}<p class="small mb-0">This booking is {{ b.status }}. {% if b.deposit_status == 'refund' %}Your deposit of {{ kes(b.deposit_amount) }} will be refunded to your M-Pesa.{% elif b.deposit_status == 'refunded' %}The deposit was refunded.{% else %}No payment is due.{% endif %}</p>
   {% else %}
     <div class="small mb-2"><strong>1. Deposit {{ kes(b.deposit_amount or 0) }}</strong> —
       {% if b.deposit_status == 'confirmed' %}<span class="text-success">confirmed (code {{ b.deposit_code }})</span>{% elif b.deposit_status == 'claimed' %}<span class="text-info-emphasis">reported paid (code {{ b.deposit_code }}), waiting for the provider to confirm</span>{% elif b.deposit_status == 'awaiting' %}<span class="text-warning-emphasis">not paid yet</span>{% else %}not required{% endif %}</div>
@@ -67,7 +75,7 @@
 
   {% if not is_admin %}<div class="card p-3 mb-3"><h2 class="h6">Actions</h2><div class="d-flex gap-2 flex-wrap">
     {% if is_prov %}
-      {% if b.status == 'pending' %}<form method="post" action="{{ url_for('bookings.set_status', bid=b.id, new='accepted') }}">{{ m.csrf() }}<button class="btn btn-primary">Accept</button></form>
+      {% if b.status == 'pending' %}<form method="post" action="{{ url_for('bookings.set_status', bid=b.id, new='accepted') }}">{{ m.csrf() }}<button class="btn btn-primary" {{ 'disabled' if b.deposit_status == 'awaiting' }}>Accept</button></form>
         <form method="post" data-confirm="Reject this booking request?" action="{{ url_for('bookings.set_status', bid=b.id, new='rejected') }}">{{ m.csrf() }}<button class="btn btn-outline-danger">Reject</button></form>
       {% elif b.status == 'accepted' %}<form method="post" data-confirm="Mark this work as completed? The customer will be asked to pay the balance." action="{{ url_for('bookings.set_status', bid=b.id, new='completed') }}">{{ m.csrf() }}<button class="btn btn-success" {{ 'disabled' if b.deposit_status not in ('confirmed','none') }}>Mark completed</button></form>
         {% if b.deposit_status in ('awaiting','none') %}<form method="post" data-confirm="Cancel this booking?" action="{{ url_for('bookings.set_status', bid=b.id, new='cancelled') }}">{{ m.csrf() }}<button class="btn btn-outline-danger">Cancel booking</button></form>{% endif %}

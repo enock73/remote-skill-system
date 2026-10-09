@@ -94,7 +94,10 @@ def apply_result(payment, ok, receipt=None, desc=None, paid_amount=None):
             receipt = receipt or f"STK{payment.id}"
             b.deposit_status, b.deposit_code = "confirmed", receipt
             notify(b.customer_id, "Deposit received", f"We received your KSh {payment.amount:,} deposit for '{title}' (receipt {receipt}). It is held safely until the job is done.", link)
-            notify(b.provider_id, "Deposit secured", f"The customer paid the KSh {payment.amount:,} deposit for '{title}'. It is held by the platform. You can start the work.", link)
+            if b.status == "pending":
+                notify(b.provider_id, "New booking request", f"{b.customer.full_name} requested '{title}' and already paid the KSh {payment.amount:,} deposit (held by the platform). Open it to accept or reject.", link)
+            else:
+                notify(b.provider_id, "Deposit secured", f"The customer paid the KSh {payment.amount:,} deposit for '{title}'. It is held by the platform. You can start the work.", link)
         else:
             receipt = receipt or f"STK{payment.id}"
             b.balance_status, b.balance_code = "confirmed", receipt

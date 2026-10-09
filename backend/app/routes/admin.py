@@ -170,8 +170,19 @@ def verification_decide(uid):
 def payouts():
     due = Booking.query.filter_by(payout_status="due").order_by(Booking.updated_at).all()
     paid = Booking.query.filter_by(payout_status="paid").order_by(Booking.payout_at.desc()).limit(30).all()
-    held = Booking.query.filter(Booking.payout_status == "none", Booking.deposit_status == "confirmed", Booking.status == "accepted").filter(Booking.payments.any(Payment.status == "success")).all()
-    return render_template("admin/payouts.html", due=due, paid=paid, held=held)
+    held = Booking.query.filter(Booking.payout_status == "none", Booking.deposit_status == "confirmed", Booking.status.in_(("pending", "accepted"))).filter(Booking.payments.any(Payment.status == "success")).all()
+    refunds = Booking.query.filter_by(deposit_status="refund").order_by(Booking.updated_at).all()
+    return render_template("admin/payouts.html", due=due, paid=paid, held=held, refunds=refunds)
+
+
+@bp.route("/payouts/<int:bid>/refunded", methods=["POST"])
+@roles_required("admin")
+def refund_done(bid):
+    b = db.session.get(Booking, bid) or abort(404)
+    if b.deposit_status != "refund": abort(400)
+    b.deposit_status = "refunded"; db.session.commit()
+    notify(b.customer_id, "Deposit refunded", f"Your deposit for '{b.listing.title}' was refunded to your M-Pesa.", url_for("bookings.detail", bid=b.id))
+    flash("Marked as refunded.", "success"); return redirect(url_for("admin.payouts"))
 
 
 @bp.route("/payouts/<int:bid>/paid", methods=["POST"])
