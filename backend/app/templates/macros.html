@@ -3,14 +3,18 @@
 {% macro verified(u) %}{% if u.is_verified %}<span class="badge badge-verified"><i class="bi bi-patch-check-fill"></i> Verified Skill</span>{% endif %}{% endmacro %}
 {% macro status(s) %}{% set c = {'pending':'warning text-dark','accepted':'info text-dark','completed':'success','rejected':'danger','cancelled':'secondary'} %}<span class="badge text-bg-{{ c.get(s,'secondary') }}">{{ s|capitalize }}</span>{% endmacro %}
 {% macro avatar(u, size=48) %}{% if u.profile_image %}<img src="{{ url_for('uploaded_file', filename=u.profile_image) }}" class="avatar" width="{{size}}" height="{{size}}" alt="">{% else %}<span class="avatar avatar-ph" style="width:{{size}}px;height:{{size}}px">{{ u.full_name[:1] }}</span>{% endif %}{% endmacro %}
-{% macro price(l) %}KES {{ '{:,.0f}'.format(l.price) }}{% endmacro %}
-{% macro listing_card(l) %}
-<div class="col"><div class="card h-100 lcard">
-{% if l.image %}<img src="{{ url_for('uploaded_file', filename=l.image) }}" class="card-img-top" alt="{{ l.title }}">{% else %}<div class="ph-img"><i class="bi bi-tools"></i></div>{% endif %}
-<div class="card-body d-flex flex-column"><span class="small text-muted">{{ l.category.name }}</span>
-<h3 class="h6 mb-1"><a href="{{ url_for('main.service_detail', listing_id=l.id) }}" class="stretched-link text-decoration-none text-dark">{{ l.title }}</a></h3>
-<div class="small mb-2">{{ l.provider.full_name }} {{ verified(l.provider) }}</div>
-<div class="mt-auto d-flex justify-content-between align-items-end"><span class="fw-bold">{{ price(l) }}</span><span class="small"><i class="bi bi-geo-alt"></i> {{ l.location }}</span></div>
-<div class="small mt-1">{{ stars(l.provider.average_rating) }}</div></div></div></div>
-{% endmacro %}
+{% macro price(l) %}KSh {{ '{:,.0f}'.format(l.price) }} {{ l.price_unit or 'per job' }}{% endmacro %}
+{% macro listing_card(l) %}{% set avg = l.provider.average_rating %}{% set n = l.provider.review_count %}
+<div class="col"><article class="skill-card">
+<div class="skill-img">{% if l.image %}<img src="{{ url_for('uploaded_file', filename=l.image) }}" alt="{{ l.title }}" loading="lazy">{% else %}<div class="skill-img-ph"><i class="bi bi-image"></i></div>{% endif %}</div>
+<div class="d-flex justify-content-between align-items-center gap-2"><span class="chip">{{ l.category.name }}</span>{% if l.provider.is_verified %}<span class="vflag"><i class="bi bi-shield-check"></i> Verified skill</span>{% endif %}</div>
+<h3><a href="{{ url_for('main.service_detail', listing_id=l.id) }}" class="stretched-link">{{ l.title }}</a></h3>
+<p class="desc">{{ l.description }}</p>
+<div class="loc"><i class="bi bi-geo-alt"></i> {{ l.location or 'Location not set' }}</div>
+<div class="foot"><div><div class="price">{{ price(l) }}</div><small class="text-muted">by {{ l.provider.full_name }}</small></div>
+<div class="text-end rate"><span class="stars">{% for i in range(1,6) %}<i class="bi bi-star{{ '-fill' if avg and i <= avg|round else '' }}"></i>{% endfor %}</span><br><small class="text-muted"><i class="bi bi-star"></i> {% if n %}{{ avg }} ({{ n }}){% else %}New (0){% endif %}</small></div></div>
+</article></div>{% endmacro %}
 {% macro empty(icon, text, link=None, label=None) %}<div class="text-center text-muted py-5"><i class="bi bi-{{icon}} display-5"></i><p class="mt-2 mb-2">{{ text }}</p>{% if link %}<a class="btn btn-primary" href="{{ link }}">{{ label }}</a>{% endif %}</div>{% endmacro %}
+
+{% macro pay_note(b) %}{% if b.status == 'accepted' %}{% if b.deposit_status == 'awaiting' %}<div class="small text-warning-emphasis">Deposit due: KSh {{ '{:,.0f}'.format(b.deposit_amount) }}</div>{% elif b.deposit_status == 'claimed' %}<div class="small text-info-emphasis">Deposit awaiting confirmation</div>{% elif b.deposit_status == 'confirmed' %}<div class="small text-success">Deposit paid</div>{% endif %}
+{% elif b.status == 'completed' %}{% if b.balance_status == 'unpaid' %}<div class="small text-warning-emphasis">Balance due: KSh {{ '{:,.0f}'.format(b.balance_amount) }}</div>{% elif b.balance_status == 'claimed' %}<div class="small text-info-emphasis">Payment awaiting confirmation</div>{% elif b.balance_status == 'confirmed' %}<div class="small text-success">Paid in full</div>{% endif %}{% endif %}{% endmacro %}

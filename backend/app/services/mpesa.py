@@ -98,7 +98,6 @@ def apply_result(payment, ok, receipt=None, desc=None, paid_amount=None):
         else:
             receipt = receipt or f"STK{payment.id}"
             b.balance_status, b.balance_code = "confirmed", receipt
-            if not b.customer_confirmed_at: b.customer_confirmed_at = datetime.utcnow()
             total = sum(p.amount for p in b.payments if p.status == "success" or p.id == payment.id)
             fee = round(total * (current_app.config["COMMISSION_PERCENT"] or 0) / 100, 2)
             b.payout_status, b.payout_amount = "due", round(total - fee, 2)
