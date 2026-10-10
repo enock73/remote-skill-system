@@ -1,0 +1,140 @@
+/* ============================================================
+   Motion and interaction layer. Loaded after style.css.
+   Timings 200-300 ms. Every effect is switched off or shortened
+   for people who ask for reduced motion (bottom of file).
+   ============================================================ */
+:root{
+  --mo-fast:200ms;--mo-med:260ms;--mo-ease:cubic-bezier(.2,.7,.2,1);
+  --mo-sel-bg:#E3F1E8;--mo-sel-bg-strong:#CFE7D8;--mo-sel-border:#0B6B47;
+  --mo-shadow-1:0 2px 8px rgba(11,46,34,.08);--mo-shadow-2:0 12px 28px rgba(11,46,34,.14);--mo-shadow-sel:0 8px 22px rgba(11,107,71,.20);
+  --mo-glow:rgba(11,107,71,.20);
+}
+html{-webkit-tap-highlight-color:rgba(11,107,71,.14)}
+a,button,.btn,.skill-card,.nav-link,.form-check-label,summary,[role=button]{touch-action:manipulation}
+
+/* ---------- 1. Buttons: hover, press, colour shift, ripple ---------- */
+.btn{position:relative;overflow:hidden;transition:background-color var(--mo-fast) var(--mo-ease),border-color var(--mo-fast) var(--mo-ease),color var(--mo-fast) var(--mo-ease),box-shadow var(--mo-fast) var(--mo-ease),transform 150ms var(--mo-ease),filter var(--mo-fast) var(--mo-ease)}
+.btn:active,.btn.is-pressed{transform:scale(.96);filter:brightness(.9);box-shadow:inset 0 2px 6px rgba(0,0,0,.18)}
+.btn:disabled,.btn.disabled{transform:none;filter:none;box-shadow:none}
+.btn-primary:active,.btn-primary.is-pressed{background-color:#063d28;border-color:#063d28}
+.btn-sun:active,.btn-sun.is-pressed{background:#d49a1f}
+.btn-mint:active,.btn-mint.is-pressed{background:#cfe7d8}
+.btn-outline-primary:active,.btn-outline-success:active,.btn-outline-secondary:active,.btn-outline-danger:active,.btn-light:active{background-color:var(--mo-sel-bg-strong)}
+.mo-ripple{position:absolute;border-radius:50%;pointer-events:none;background:rgba(255,255,255,.45);transform:scale(0);animation:moRipple 550ms var(--mo-ease) forwards}
+.btn-light .mo-ripple,.btn-outline-primary .mo-ripple,.btn-outline-secondary .mo-ripple,.btn-outline-success .mo-ripple,.btn-outline-danger .mo-ripple,.btn-sun .mo-ripple,.btn-mint .mo-ripple{background:rgba(11,107,71,.22)}
+@keyframes moRipple{to{transform:scale(1);opacity:0}}
+
+/* hover effects only where a real pointer exists, so phones do not get stuck "hover" states */
+@media (hover:hover){
+  .btn:not(:disabled):not(.disabled):hover{transform:translateY(-1px);box-shadow:var(--mo-shadow-1)}
+  .btn:not(:disabled):not(.disabled):active{transform:scale(.96)}
+  a:not(.btn):not(.nav-link):not(.stretched-link):hover{transition:color var(--mo-fast)}
+}
+
+/* ---------- 2. Cards: hover lift, selected state, entrance ---------- */
+.skill-card,.mo-card,.lcard,.stat{transition:transform var(--mo-med) var(--mo-ease),box-shadow var(--mo-med) var(--mo-ease),border-color var(--mo-fast) var(--mo-ease),background-color var(--mo-fast) var(--mo-ease)}
+.mo-card{cursor:pointer}
+@media (hover:hover){
+  .skill-card:hover,.mo-card:hover,.lcard:hover,.stat:hover{transform:translateY(-4px);box-shadow:var(--mo-shadow-2)}
+  .skill-card:hover .skill-img img{transform:scale(1.05)}
+}
+.skill-img img{transition:transform 400ms var(--mo-ease)}
+.skill-card:active,.mo-card:active{transform:translateY(-1px) scale(.985)}
+/* selected: coloured border, light shade, shadow. Stays until another card is chosen or the page changes. */
+.skill-card.is-selected,.mo-card.is-selected,.selectable.is-selected{border-color:var(--mo-sel-border)!important;background-color:var(--mo-sel-bg)!important;box-shadow:var(--mo-shadow-sel)!important;transform:translateY(-2px)}
+.skill-card.is-selected::after,.mo-card.is-selected::after{content:"\F633";font-family:"bootstrap-icons";position:absolute;top:.7rem;right:.8rem;z-index:3;width:1.7rem;height:1.7rem;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--mo-sel-border);color:#fff;font-size:1rem;animation:moPop 260ms var(--mo-ease)}
+.mo-card{position:relative}
+@keyframes moPop{from{transform:scale(.3);opacity:0}to{transform:scale(1);opacity:1}}
+.skill-card:has(.stretched-link:focus-visible),.mo-card:has(.stretched-link:focus-visible){outline:3px solid var(--sun);outline-offset:2px}
+.stretched-link:focus-visible{outline:none}
+
+/* gentle entrance: only hidden when JS is running, and revealed by an observer */
+html.js .mo-reveal{opacity:0;transform:translateY(16px)}
+html.js .mo-reveal.mo-in{opacity:1;transform:none;transition:opacity 420ms var(--mo-ease),transform 420ms var(--mo-ease);transition-delay:calc(var(--mo-i,0) * 55ms)}
+
+/* ---------- 3. Navigation: hover underline, active page pill, mobile menu, dropdowns, tabs ---------- */
+.bg-nav .nav-link{position:relative;border-radius:.6rem;padding:.5rem .8rem;transition:color var(--mo-fast) var(--mo-ease),background-color var(--mo-fast) var(--mo-ease),box-shadow var(--mo-fast) var(--mo-ease)}
+.bg-nav .nav-link::after{content:"";position:absolute;left:.8rem;right:.8rem;bottom:.2rem;height:2px;border-radius:2px;background:var(--teal);transform:scaleX(0);transform-origin:left;transition:transform var(--mo-med) var(--mo-ease)}
+@media (hover:hover){.bg-nav .nav-link:hover{background:rgba(11,107,71,.07)}.bg-nav .nav-link:hover::after{transform:scaleX(1)}}
+.bg-nav .nav-link:active{background:var(--mo-sel-bg-strong)}
+.bg-nav .nav-link.active,.bg-nav .nav-link.is-selected,.bg-nav .nav-link[aria-current=page]{color:var(--teal);font-weight:600;background:var(--mo-sel-bg);box-shadow:0 2px 8px rgba(11,107,71,.14)}
+.bg-nav .nav-link.active::after,.bg-nav .nav-link.is-selected::after{transform:scaleX(1)}
+.bg-nav .nav-link:focus-visible{outline:3px solid var(--sun);outline-offset:1px}
+.navbar-toggler{transition:box-shadow var(--mo-fast),transform 150ms}.navbar-toggler:active{transform:scale(.92)}
+.navbar-toggler-icon{transition:transform var(--mo-med) var(--mo-ease)}.navbar-toggler[aria-expanded=true] .navbar-toggler-icon{transform:rotate(90deg)}
+.navbar-collapse.show .nav-item,.navbar-collapse.collapsing .nav-item{animation:moSlideIn var(--mo-med) var(--mo-ease) both;animation-delay:calc(var(--mo-i,0) * 35ms)}
+@keyframes moSlideIn{from{opacity:0;transform:translateX(-14px)}to{opacity:1;transform:none}}
+#notif-badge{transition:transform var(--mo-med) var(--mo-ease)}#notif-badge:not(.d-none){animation:moPop var(--mo-med) var(--mo-ease)}
+/* dropdown menus fade and slide instead of snapping */
+.dropdown-menu{display:block;visibility:hidden;opacity:0;pointer-events:none;margin-top:0;transform:translateY(-8px);transition:opacity var(--mo-fast) var(--mo-ease),transform var(--mo-fast) var(--mo-ease),visibility 0s linear var(--mo-fast);border-radius:.8rem;box-shadow:var(--mo-shadow-2)}
+.dropdown-menu.show{visibility:visible;opacity:1;pointer-events:auto;transform:none;transition-delay:0s}
+.dropdown-item{border-radius:.5rem;transition:background-color var(--mo-fast),color var(--mo-fast),padding-left var(--mo-fast) var(--mo-ease)}
+.dropdown-item:hover,.dropdown-item:focus{background:var(--mo-sel-bg);color:var(--ink);padding-left:1.2rem}
+.dropdown-item:active,.dropdown-item.active,.dropdown-item.is-selected{background:var(--mo-sel-bg-strong);color:var(--ink)}
+/* tabs, pills, list groups */
+.nav-tabs .nav-link,.nav-pills .nav-link,.list-group-item-action{transition:background-color var(--mo-fast),color var(--mo-fast),border-color var(--mo-fast),box-shadow var(--mo-fast)}
+.nav-pills .nav-link.active,.list-group-item.active,.list-group-item.is-selected{background:var(--mo-sel-bg);color:var(--teal);border-color:var(--mo-sel-border);box-shadow:var(--mo-shadow-1)}
+.nav-tabs .nav-link.active{border-bottom:3px solid var(--teal);color:var(--teal)}
+.list-group-item-action:hover{background:rgba(11,107,71,.06)}.list-group-item-action:active{background:var(--mo-sel-bg-strong)}
+.tab-pane.active{animation:moFade var(--mo-med) var(--mo-ease)}
+@keyframes moFade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.offcanvas{transition:transform 300ms var(--mo-ease)}
+.modal.fade .modal-dialog{transform:translateY(18px) scale(.97);transition:transform 260ms var(--mo-ease),opacity 260ms}
+.modal.show .modal-dialog{transform:none}
+.modal-content{border-radius:1rem;box-shadow:var(--mo-shadow-2)}
+/* page changes */
+main{animation:moPage 300ms var(--mo-ease) both}
+@keyframes moPage{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+body.mo-leaving main{opacity:.55;transition:opacity 180ms}
+
+/* ---------- 4. Forms: focus glow, validation, notifications, loading ---------- */
+.form-control,.form-select,.form-check-input{transition:border-color var(--mo-fast) var(--mo-ease),box-shadow var(--mo-fast) var(--mo-ease),background-color var(--mo-fast) var(--mo-ease)}
+.form-control:focus,.form-select:focus,textarea.form-control:focus{border-color:var(--teal);box-shadow:0 0 0 .25rem var(--mo-glow);outline:2px solid transparent}
+.form-control:hover:not(:focus):not(:disabled),.form-select:hover:not(:focus):not(:disabled){border-color:#8fb5a0}
+.form-control.is-invalid:focus,.was-validated .form-control:invalid:focus{box-shadow:0 0 0 .25rem rgba(220,53,69,.2)}
+.form-control.is-valid:focus,.was-validated .form-control:valid:focus{box-shadow:0 0 0 .25rem rgba(25,135,84,.2)}
+.form-label{transition:color var(--mo-fast)}.mo-field-focus>.form-label,.form-label.mo-focus{color:var(--teal)}
+.form-check-input:checked{animation:moPop 220ms var(--mo-ease)}
+.form-check{border-radius:.7rem;padding-top:.35rem;padding-bottom:.35rem;transition:background-color var(--mo-fast),box-shadow var(--mo-fast)}
+.form-check:has(.form-check-input:checked){background:var(--mo-sel-bg);box-shadow:inset 0 0 0 1px var(--mo-sel-border)}
+.form-check:active{background:var(--mo-sel-bg-strong)}
+.invalid-feedback,.valid-feedback{animation:moFeedback var(--mo-med) var(--mo-ease) both}
+@keyframes moFeedback{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+.mo-shake{animation:moShake 320ms var(--mo-ease)}
+@keyframes moShake{0%,100%{transform:none}20%{transform:translateX(-6px)}40%{transform:translateX(5px)}60%{transform:translateX(-3px)}80%{transform:translateX(2px)}}
+.alert{border-radius:.8rem;animation:moAlert 320ms var(--mo-ease) both;transition:opacity 300ms,transform 300ms,max-height 300ms,margin 300ms,padding 300ms}
+@keyframes moAlert{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:none}}
+.alert.mo-out{opacity:0;transform:translateX(24px);max-height:0;margin-top:0;margin-bottom:0;padding-top:0;padding-bottom:0;overflow:hidden}
+.alert-success{border-left:4px solid #198754}.alert-danger{border-left:4px solid #dc3545}.alert-warning{border-left:4px solid #e0a100}.alert-info{border-left:4px solid #0dcaf0}
+/* loading: spinner in the button, a thin progress bar on top of the page */
+.btn .spinner-border{vertical-align:-.15em}
+.btn[aria-busy=true]{pointer-events:none;opacity:.85}
+#mo-progress{position:fixed;top:0;left:0;height:3px;width:0;z-index:2000;background:linear-gradient(90deg,var(--teal),var(--sun));box-shadow:0 0 8px rgba(11,107,71,.5);opacity:0;pointer-events:none}
+#mo-progress.on{opacity:1;width:80%;transition:width 8s cubic-bezier(.1,.6,.2,1)}
+#mo-progress.done{opacity:0;width:100%;transition:width 150ms,opacity 300ms 150ms}
+.mo-loading{position:relative}.mo-loading::after{content:"";position:absolute;inset:0;background:rgba(255,255,255,.55);border-radius:inherit}
+.mo-skeleton{background:linear-gradient(90deg,#e8ede7 25%,#f4f7f3 37%,#e8ede7 63%);background-size:400% 100%;animation:moShimmer 1.3s ease infinite;border-radius:.5rem;min-height:1em}
+@keyframes moShimmer{0%{background-position:100% 50%}100%{background-position:0 50%}}
+
+/* ---------- 5. Rows, icons, chips ---------- */
+.table tbody tr{transition:background-color var(--mo-fast)}
+@media (hover:hover){.table tbody tr:hover>*{background-color:rgba(11,107,71,.05)}}
+.table tbody tr.is-selected>*{background-color:var(--mo-sel-bg)!important;box-shadow:none}
+.table tbody tr.is-selected>:first-child{box-shadow:inset 4px 0 0 var(--mo-sel-border)!important}
+.chip,.badge{transition:background-color var(--mo-fast),transform 150ms}
+a:hover .chip{background:#cfe7d8}
+.bi{transition:transform var(--mo-fast) var(--mo-ease),color var(--mo-fast)}
+a:hover>.bi:not(.display-5),.btn:hover>.bi{transform:scale(1.12)}
+.is-selected.icon-btn,.icon-btn.is-selected{background:var(--mo-sel-bg);color:var(--teal);box-shadow:var(--mo-shadow-1)}
+.bubble{animation:moPop 220ms var(--mo-ease)}
+.trust-ring{transition:transform var(--mo-med) var(--mo-ease)}.trust-ring:hover{transform:scale(1.06)}
+.progress-bar{transition:width 600ms var(--mo-ease)}
+
+/* ---------- 6. Reduced motion: no movement, instant colour changes ---------- */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:.01ms!important;transition-delay:0s!important;scroll-behavior:auto!important}
+  html.js .mo-reveal{opacity:1;transform:none}
+  .btn:active,.btn.is-pressed,.skill-card:hover,.mo-card:hover,.skill-card:active{transform:none}
+  .mo-ripple{display:none}
+  #mo-progress{display:none}
+}
