@@ -1,0 +1,6 @@
+{% extends 'base.html' %}{% block title %}Disputes{% endblock %}
+{% block content %}<h1 class="h3 mb-1">Disputes</h1><p class="text-muted">Problems raised by customers and providers. Open ones are listed first. While a dispute is open, the provider's payout is on hold.</p>
+{% if disputes %}<div class="table-responsive"><table class="table align-middle"><thead><tr><th>#</th><th>Booking</th><th>Opened by</th><th>Problem</th><th>Held</th><th>Status</th><th></th></tr></thead><tbody>
+{% for d in disputes %}<tr><td>{{ d.id }}</td><td><a href="{{ url_for('bookings.detail', bid=d.booking.id) }}">#{{ d.booking.id }} {{ d.booking.listing.title }}</a></td><td>{{ d.opened_by.full_name }}<div class="small text-muted">{{ d.opened_by.role }}</div></td><td class="small">{{ d.reason[:120] }}{{ '…' if d.reason|length > 120 }}</td><td>KSh {{ '{:,.0f}'.format(d.booking.paid_total) }}</td>
+<td>{% if d.status == 'open' %}<span class="badge text-bg-danger">Open</span>{% else %}<span class="badge text-bg-secondary">Decided</span>{% endif %}</td><td><a class="btn btn-sm btn-primary" href="{{ url_for('disputes.admin_view', did=d.id) }}">{{ 'Decide' if d.status == 'open' else 'View' }}</a></td></tr>{% endfor %}</tbody></table></div>
+{% else %}{{ m.empty('flag', 'No disputes.') }}{% endif %}{% endblock %}

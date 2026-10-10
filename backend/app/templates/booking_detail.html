@@ -84,8 +84,24 @@
       {% if b.status == 'pending' or (b.status == 'accepted' and b.deposit_status in ('awaiting','none')) %}<form method="post" data-confirm="Cancel this booking?" action="{{ url_for('bookings.set_status', bid=b.id, new='cancelled') }}">{{ m.csrf() }}<button class="btn btn-outline-danger">Cancel booking</button></form>{% endif %}
       {% if b.status == 'completed' and not b.review %}<a class="btn btn-sun" href="{{ url_for('bookings.review', bid=b.id) }}">Leave a review</a>{% endif %}
     {% endif %}
-    <button class="btn btn-outline-secondary ms-auto" data-bs-toggle="collapse" data-bs-target="#reportBox" type="button"><i class="bi bi-flag"></i> Report a problem</button></div>
-    <div class="collapse mt-3" id="reportBox"><form method="post" action="{{ url_for('bookings.report', bid=b.id) }}">{{ m.csrf() }}<label class="form-label small" for="rr">What went wrong? An administrator will read this booking's chat.</label><textarea id="rr" class="form-control mb-2" name="reason" rows="3" maxlength="500" required></textarea><button class="btn btn-danger btn-sm">Send report</button></form></div></div>{% endif %}
+    {% set can_dispute = (b.status in ('accepted','completed') or (b.status == 'pending' and b.deposit_status == 'confirmed')) and not b.open_dispute %}
+    {% if can_dispute %}<button class="btn btn-outline-danger ms-auto" data-bs-toggle="collapse" data-bs-target="#disputeBox" type="button"><i class="bi bi-flag"></i> Open a dispute</button>{% endif %}</div>
+    {% if can_dispute %}<div class="collapse mt-3" id="disputeBox"><form method="post" enctype="multipart/form-data" action="{{ url_for('disputes.open_dispute', bid=b.id) }}" data-confirm="Open a dispute? The other side and an administrator will be told, and any payout is put on hold.">{{ m.csrf() }}
+      <label class="form-label small" for="dr">What went wrong? Be specific: what was agreed, and what happened instead.</label><textarea id="dr" class="form-control mb-2" name="reason" rows="3" minlength="10" maxlength="1500" required></textarea>
+      <label class="form-label small" for="dp">Photos that show the problem (optional, up to 4)</label><input id="dp" class="form-control mb-2" type="file" name="photos" accept="image/*" multiple>
+      <button class="btn btn-danger btn-sm">Open dispute</button></form></div>{% endif %}</div>{% endif %}
+
+  {% set dsp = b.disputes[0] if b.disputes else None %}
+  {% if dsp %}<div class="card p-3 mb-3 {{ 'border-danger' if dsp.status == 'open' else '' }}"><h2 class="h6"><i class="bi bi-exclamation-triangle"></i> Dispute {{ '(open)' if dsp.status == 'open' else '(decided)' }}</h2>
+    <div class="small mb-2"><strong>{{ dsp.opened_by.full_name }}</strong> opened it on {{ dsp.created_at.strftime('%d %b %Y %H:%M') }}:<br>"{{ dsp.reason }}"</div>
+    {% for e in dsp.evidence %}<div class="small border-top pt-2 mt-2"><span class="text-muted">{{ e.user.full_name }} ({{ 'customer' if e.user_id == b.customer_id else 'provider' }}), {{ e.created_at.strftime('%d %b %H:%M') }}</span>
+      {% if e.note %}<div>{{ e.note }}</div>{% endif %}{% if e.filename %}<a href="{{ url_for('disputes.evidence_file', eid=e.id) }}" target="_blank" rel="noopener"><img src="{{ url_for('disputes.evidence_file', eid=e.id) }}" class="rounded mt-1" style="max-height:110px" alt="Evidence photo"></a>{% endif %}</div>{% endfor %}
+    {% if dsp.status == 'open' %}
+      <div class="alert alert-warning small mt-3 mb-2">An administrator will decide. Payouts for this booking are on hold until then.</div>
+      {% if not is_admin %}<form method="post" enctype="multipart/form-data" action="{{ url_for('disputes.add_evidence', bid=b.id) }}">{{ m.csrf() }}<label class="form-label small" for="en">Add your side</label><textarea id="en" class="form-control mb-2" name="note" rows="2" maxlength="1000" placeholder="Notes"></textarea><input class="form-control mb-2" type="file" name="photos" accept="image/*" multiple><button class="btn btn-outline-primary btn-sm">Add evidence</button></form>{% endif %}
+    {% else %}
+      <div class="alert alert-info small mt-3 mb-0"><strong>Decision:</strong> {{ {'refund_customer':'refund to the customer','pay_provider':'money released to the provider','split':'money split (KSh ' ~ ('{:,.0f}'.format(dsp.refund_amount or 0)) ~ ' back to the customer)'}[dsp.outcome] }}.<br>{{ dsp.admin_note }}</div>
+    {% endif %}</div>{% endif %}
 
   <div class="card p-3 small"><h2 class="h6"><i class="bi bi-shield-check"></i> Stay safe</h2><ul class="mb-0 ps-3">
     <li>Keep chat and payments inside this booking, so there is a record if something goes wrong.</li>

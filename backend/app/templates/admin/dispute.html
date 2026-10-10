@@ -1,0 +1,19 @@
+{% extends 'base.html' %}{% block title %}Dispute #{{ d.id }}{% endblock %}
+{% block content %}<a class="small text-decoration-none" href="{{ url_for('disputes.admin_list') }}"><i class="bi bi-arrow-left"></i> All disputes</a>
+<h1 class="h3 mb-3">Dispute #{{ d.id }}: booking #{{ b.id }} {{ b.listing.title }}</h1>
+<div class="row g-4"><div class="col-lg-7">
+<div class="card p-3 mb-3"><h2 class="h6">What happened</h2><div class="small mb-2"><strong>{{ d.opened_by.full_name }}</strong> ({{ d.opened_by.role }}) on {{ d.created_at.strftime('%d %b %Y %H:%M') }}:<br>"{{ d.reason }}"</div>
+{% for e in d.evidence %}<div class="small border-top pt-2 mt-2"><span class="text-muted">{{ e.user.full_name }} ({{ 'customer' if e.user_id == b.customer_id else 'provider' }}), {{ e.created_at.strftime('%d %b %H:%M') }}</span>{% if e.note %}<div>{{ e.note }}</div>{% endif %}{% if e.filename %}<div><a href="{{ url_for('disputes.evidence_file', eid=e.id) }}" target="_blank" rel="noopener"><img src="{{ url_for('disputes.evidence_file', eid=e.id) }}" class="rounded mt-1" style="max-height:140px" alt="Evidence photo"></a></div>{% endif %}</div>{% endfor %}</div>
+<div class="card p-3 mb-3"><h2 class="h6">Chat between them</h2>{% for msg in b.messages %}<div class="small"><strong>{{ msg.sender.full_name }}:</strong> {{ msg.body }}</div>{% else %}<div class="small text-muted">No messages.</div>{% endfor %}</div>
+</div><div class="col-lg-5">
+<div class="card p-3 mb-3"><h2 class="h6">Money</h2><div class="small">Price KSh {{ '{:,.0f}'.format(b.agreed_price or 0) }} · deposit KSh {{ '{:,.0f}'.format(b.deposit_amount or 0) }}<br>Paid through M-Pesa and held: <strong>KSh {{ '{:,.0f}'.format(b.paid_total) }}</strong><br>Payout status: {{ b.payout_status }} · Refund status: {{ b.refund_status or 'none' }}</div>
+{% for p in b.payments %}<div class="small text-muted">{{ p.kind|capitalize }} KSh {{ '{:,.0f}'.format(p.amount) }}: {{ p.status }} {{ p.mpesa_receipt or '' }}</div>{% endfor %}</div>
+<div class="card p-3 mb-3"><h2 class="h6">The provider</h2><div class="small">{{ b.provider.full_name }} {{ m.trust_badge(b.provider) }}<br>Jobs finished: {{ b.provider.trust.jobs }} · disputes lost: {{ b.provider.trust.lost }}</div></div>
+{% if d.status == 'open' %}<form class="card p-3" method="post" action="{{ url_for('disputes.resolve', did=d.id) }}" data-confirm="Save this decision? Both sides will be told.">{{ m.csrf() }}<h2 class="h6">Your decision</h2>
+<div class="form-check"><input class="form-check-input" type="radio" name="outcome" id="o1" value="refund_customer" required><label class="form-check-label" for="o1">Refund the customer everything held</label></div>
+<div class="form-check"><input class="form-check-input" type="radio" name="outcome" id="o2" value="pay_provider"><label class="form-check-label" for="o2">Pay the provider (release the held money)</label></div>
+<div class="form-check mb-2"><input class="form-check-input" type="radio" name="outcome" id="o3" value="split"><label class="form-check-label" for="o3">Split it</label></div>
+<label class="form-label small" for="ra">If splitting: refund to the customer (KSh). The rest goes to the provider{% if commission %} less the {{ commission }}% fee{% endif %}.</label><input id="ra" class="form-control mb-2" type="number" name="refund_amount" min="1" step="1" placeholder="e.g. 300">
+<label class="form-label small" for="nt">Reason (both sides will read this)</label><textarea id="nt" class="form-control mb-2" name="note" rows="3" maxlength="1500" required></textarea><button class="btn btn-primary">Save decision</button></form>
+{% else %}<div class="alert alert-info"><strong>Decided:</strong> {{ d.outcome }} on {{ d.resolved_at.strftime('%d %b %Y') if d.resolved_at }}.<br>{{ d.admin_note }}</div>{% endif %}
+</div></div>{% endblock %}

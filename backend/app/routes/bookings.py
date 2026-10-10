@@ -295,20 +295,6 @@ def send_message(bid):
     return redirect(link + "#chat")
 
 
-@bp.route("/bookings/<int:bid>/report", methods=["POST"])
-@roles_required("customer", "provider")
-@limiter.limit("5 per hour", methods=["POST"])
-def report(bid):
-    b = _booking_for(bid, allow_admin=False)
-    reason = request.form.get("reason", "").strip()
-    if len(reason) < 5:
-        flash("Please describe the problem (at least a few words).", "danger"); return redirect(_link(b))
-    for a in User.query.filter_by(role="admin").all():
-        notify(a.id, "Booking reported", f"{current_user.full_name} ({current_user.role}) reported booking #{b.id} '{b.listing.title}': {reason[:300]}", _link(b))
-    flash("Thank you. An administrator has been notified and can read the chat for this booking.", "success")
-    return redirect(_link(b))
-
-
 @bp.route("/bookings/<int:bid>/review", methods=["GET", "POST"])
 @roles_required("customer")
 def review(bid):

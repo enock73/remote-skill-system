@@ -8,6 +8,7 @@
 <div class="col"><article class="skill-card">
 <div class="skill-img">{% if l.image %}<img src="{{ url_for('uploaded_file', filename=l.image) }}" alt="{{ l.title }}" loading="lazy">{% else %}<div class="skill-img-ph"><i class="bi bi-image"></i></div>{% endif %}</div>
 <div class="d-flex justify-content-between align-items-center gap-2"><span class="chip">{{ l.category.name }}</span>{% if l.provider.is_verified %}<span class="vflag"><i class="bi bi-shield-check"></i> Verified skill</span>{% endif %}</div>
+<div class="mt-1">{{ trust_badge(l.provider) }}</div>
 <h3><a href="{{ url_for('main.service_detail', listing_id=l.id) }}" class="stretched-link">{{ l.title }}</a></h3>
 <p class="desc">{{ l.description }}</p>
 <div class="loc"><i class="bi bi-geo-alt"></i> {{ l.location or 'Location not set' }}</div>
@@ -18,3 +19,5 @@
 
 {% macro pay_note(b) %}{% if b.status == 'pending' and b.deposit_status == 'awaiting' %}<div class="small text-warning-emphasis">Deposit due: KSh {{ '{:,.0f}'.format(b.deposit_amount) }}</div>{% elif b.status == 'pending' and b.deposit_status == 'confirmed' %}<div class="small text-success">Deposit paid</div>{% elif b.status == 'accepted' %}{% if b.deposit_status == 'awaiting' %}<div class="small text-warning-emphasis">Deposit due: KSh {{ '{:,.0f}'.format(b.deposit_amount) }}</div>{% elif b.deposit_status == 'claimed' %}<div class="small text-info-emphasis">Deposit awaiting confirmation</div>{% elif b.deposit_status == 'confirmed' %}<div class="small text-success">Deposit paid</div>{% endif %}
 {% elif b.status == 'completed' %}{% if b.balance_status == 'unpaid' %}<div class="small text-warning-emphasis">Balance due: KSh {{ '{:,.0f}'.format(b.balance_amount) }}</div>{% elif b.balance_status == 'claimed' %}<div class="small text-info-emphasis">Payment awaiting confirmation</div>{% elif b.balance_status == 'confirmed' %}<div class="small text-success">Paid in full</div>{% endif %}{% endif %}{% endmacro %}
+
+{% macro trust_badge(u) %}{% if u.role == 'provider' %}{% set t = u.trust %}<span class="badge text-bg-{{ t.color }}" title="Trust score {{ t.score }} out of 100"><i class="bi bi-shield-fill-check"></i> {{ t.tier }} · {{ t.score }}</span>{% endif %}{% endmacro %}

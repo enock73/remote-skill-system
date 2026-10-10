@@ -43,6 +43,11 @@ class User(db.Model, UserMixin):
                                  cascade="all, delete-orphan", order_by="PortfolioPhoto.id.desc()")
 
     @property
+    def trust(self):
+        from app.services.trust import score
+        return score(self)
+
+    @property
     def payment_number(self):
         return self.mpesa_number or self.phone
 
@@ -200,6 +205,8 @@ class Booking(db.Model):
     payout_amount = db.Column(db.Float, default=0.0)
     payout_ref = db.Column(db.String(40))                       # M-Pesa reference of the payout to the provider
     payout_at = db.Column(db.DateTime)
+    refund_amount = db.Column(db.Float, default=0.0)            # money to send back to the customer after a dispute
+    refund_status = db.Column(db.String(10), default="none")    # none -> due -> done
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -209,6 +216,15 @@ class Booking(db.Model):
     review = db.relationship("Review", backref="booking", uselist=False,
                               cascade="all, delete-orphan")
     payments = db.relationship("Payment", backref="booking", lazy=True, cascade="all, delete-orphan", order_by="Payment.id")
+    disputes = db.relationship("Dispute", backref="booking", lazy=True, cascade="all, delete-orphan", order_by="Dispute.id.desc()")
+
+    @property
+    def open_dispute(self):
+        return next((d for d in self.disputes if d.status == "open"), None)
+
+    @property
+    def paid_total(self):
+        return sum(p.amount for p in self.payments if p.status == "success")
 
     @property
     def balance_amount(self):
@@ -328,3 +344,36 @@ class PortfolioPhoto(db.Model):
     filename = db.Column(db.String(255), nullable=False)
     caption = db.Column(db.String(120))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class Dispute(db.Model):
+    """A problem raised by the customer or the provider. Both sides add evidence; an administrator decides."""
+    __tablename__ = "disputes"
+
+    id = db.Column(db.Integer, primary_key=True)
+    booking_id = db.Column(db.Integer, db.ForeignKey("bookings.id"), nullable=False, index=True)
+    opened_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    reason = db.Column(db.Text, nullable=False)
+    status = db.Column(db.String(10), default="open")           # open -> resolved
+    outcome = db.Column(db.String(20))                          # refund_customer / pay_provider / split
+    refund_amount = db.Column(db.Float, default=0.0)
+    admin_note = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    resolved_at = db.Column(db.DateTime)
+
+    opened_by = db.relationship("User", foreign_keys=[opened_by_id])
+    evidence = db.relationship("DisputeEvidence", backref="dispute", lazy=True, cascade="all, delete-orphan", order_by="DisputeEvidence.id")
+
+
+class DisputeEvidence(db.Model):
+    """A note and/or one private photo added to a dispute by either side."""
+    __tablename__ = "dispute_evidence"
+
+    id = db.Column(db.Integer, primary_key=True)
+    dispute_id = db.Column(db.Integer, db.ForeignKey("disputes.id"), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    note = db.Column(db.String(1000))
+    filename = db.Column(db.String(255))                        # private file, served only to the two sides and admins
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship("User", foreign_keys=[user_id])

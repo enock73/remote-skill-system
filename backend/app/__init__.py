@@ -28,8 +28,8 @@ def create_app(config_class=Config):
         u = db.session.get(User, int(uid))
         return u if u and u.is_active_account else None
 
-    from app.routes import main, auth, bookings, provider, admin
-    for m in (main, auth, bookings, provider, admin):
+    from app.routes import main, auth, bookings, provider, admin, disputes
+    for m in (main, auth, bookings, provider, admin, disputes):
         app.register_blueprint(m.bp)
 
     images_dir = os.environ.get("PUBLIC_IMAGES_DIR") or os.path.abspath(os.path.join(app.root_path, "..", "..", "public", "images"))
@@ -107,7 +107,8 @@ NEW_COLUMNS = {
     "bookings": {"work_place": "VARCHAR(10) DEFAULT 'customer'", "customer_phone": "VARCHAR(20)", "customer_address": "VARCHAR(255)",
                  "agreed_price": "FLOAT", "deposit_amount": "FLOAT DEFAULT 0", "deposit_status": "VARCHAR(10) DEFAULT 'none'",
                  "deposit_code": "VARCHAR(20)", "balance_status": "VARCHAR(10) DEFAULT 'none'", "balance_code": "VARCHAR(20)",
-                 "payout_status": "VARCHAR(10) DEFAULT 'none'", "payout_amount": "FLOAT DEFAULT 0", "payout_ref": "VARCHAR(40)", "payout_at": "TIMESTAMP"},
+                 "payout_status": "VARCHAR(10) DEFAULT 'none'", "payout_amount": "FLOAT DEFAULT 0", "payout_ref": "VARCHAR(40)", "payout_at": "TIMESTAMP",
+                 "refund_amount": "FLOAT DEFAULT 0", "refund_status": "VARCHAR(10) DEFAULT 'none'"},
     "notifications": {"link": "VARCHAR(200)"},
 }
 

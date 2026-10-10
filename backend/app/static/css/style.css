@@ -63,3 +63,5 @@ h1,h2,h3,h4{font-family:'Plus Jakarta Sans',system-ui,sans-serif;letter-spacing:
 .bubble-row.mine .bubble{background:#0B6B47;color:#fff;border-color:#0B6B47}
 .bubble .who{font-size:.72rem;opacity:.75;margin-bottom:.15rem}
 @media(max-width:991px){.chat-card{position:static}}
+
+.trust-ring{width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1.3rem;flex:none}
